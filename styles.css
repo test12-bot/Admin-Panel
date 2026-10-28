@@ -232,8 +232,6 @@ body{touch-action:manipulation;}
 .action-card .txt{flex:1; min-width:0;}
 .action-card .txt h3{margin:0 0 4px; font-size:17.5px; font-weight:700; color:var(--teal-900);}
 .action-card .txt p{margin:0; font-size:12.5px; color:var(--ink-soft); font-weight:500;}
-.action-card .chev{flex:0 0 auto; color:var(--ink-soft); transition:transform .18s var(--ease-out);}
-.action-card:active .chev{transform:translateX(-3px);}
 
 /* ===== شبكة الخيارات ===== */
 .rest-grid{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
@@ -459,7 +457,6 @@ button.brand-mini:active{transform:scale(.95);}
     font-size:11.5px; font-weight:600; color:var(--teal-800); line-height:1.6;
   }
 
-
 .field input[type=time]{text-align:right;}
 
 /* ===== زر الحساب (صورة دائرية) والقائمة ===== */
@@ -538,10 +535,7 @@ button.brand-mini:active{transform:scale(.95);}
 .pf-k{flex:0 0 auto; font-size:13.5px; font-weight:600; white-space:nowrap;}
 .pf-row .pf-k:only-of-type{flex:1;}
 .pf-v{flex:1; min-width:0; font-size:13.5px; font-weight:700; color:var(--teal-900); text-align:end; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.pf-chev{color:var(--ink-soft); flex:0 0 auto;}
-.pf-link .pf-k{flex:1;}
-.pf-link{transition:background .15s var(--ease-out);}
-.pf-link:active{background:rgba(37,206,209,.12);}
+
 .pf-logout{
     display:flex; align-items:center; justify-content:center; gap:9px; width:100%; margin-top:16px; padding:14px;
     border-radius:999px; font-size:14px; font-weight:700; color:var(--danger);
@@ -562,8 +556,8 @@ button.brand-mini:active{transform:scale(.95);}
 /* ===== الصفحات الداخلية: هوية HIGHWAY (ألوان الهوية فقط، بدون تداخل) ===== */
 .modal-card{position:relative; overflow:hidden;}
 .modal-title::after{content:""; display:block; width:42px; height:5px; margin-top:7px; border-radius:5px; background:var(--teal);}
-.modal-summary, .result-box, .pickup-pill{position:relative; overflow:hidden; isolation:isolate; background:var(--teal);}
-.modal-summary::after, .result-box::after, .pickup-pill::after{
+.modal-summary, .pickup-pill{position:relative; overflow:hidden; isolation:isolate; background:var(--teal);}
+.modal-summary::after, .pickup-pill::after{
     content:""; position:absolute; right:-14px; bottom:-10px; width:150px; height:62px; z-index:-1; pointer-events:none;
     background:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20300%20200%27%3E%3Cpath%20d%3D%27M0%20150C60%2080%20180%2030%20300%2020%27%20fill%3D%27none%27%20stroke%3D%27%23F3F0E7%27%20stroke-width%3D%276%27%20stroke-linecap%3D%27round%27%20stroke-opacity%3D%27.5%27%2F%3E%3Cpath%20d%3D%27M30%20185C100%20125%20200%2080%20300%2070%27%20fill%3D%27none%27%20stroke%3D%27%23F3F0E7%27%20stroke-width%3D%276%27%20stroke-linecap%3D%27round%27%20stroke-opacity%3D%27.28%27%2F%3E%3C%2Fsvg%3E") no-repeat center/contain;
 }
@@ -577,7 +571,7 @@ button.brand-mini:active{transform:scale(.95);}
 .rt-price{margin-top:8px; align-self:flex-start; padding:5px 13px; border-radius:999px; font-size:13px; font-weight:800; color:var(--teal-900); background:var(--yellow);}
 .check-badge{position:relative;}
 .check-badge::after{content:""; position:absolute; inset:-9px; border-radius:50%; border:2px dashed var(--teal);}
-.item-price{background:var(--teal); color:var(--teal-900);}
+
 .price-row::before{content:""; position:absolute; inset-block:0; inset-inline-start:0; width:4px; background:var(--teal);}
 .form-card{position:relative; overflow:hidden;}
 
@@ -593,7 +587,6 @@ button.brand-mini:active{transform:scale(.95);}
 /* لا يظهر شيء من الموقع تحت الشاشة الافتتاحية (حتى مع مستخدم محفوظ) */
 #splash:not(.hide) ~ .app-shell{visibility:hidden;}
 html:has(#splash:not(.hide)), html:has(#splash:not(.hide)) body{background:var(--teal-800); overflow:hidden; height:100%;}
-
 
 /* ===== أزرار ونوافذ أساسية (من موقع المطاعم) ===== */
 .ghost-btn{
@@ -630,20 +623,12 @@ html:has(#splash:not(.hide)), html:has(#splash:not(.hide)) body{background:var(-
     padding:11px 15px; border-radius:14px; margin-bottom:16px;
     box-shadow:0 10px 20px -10px rgba(37,206,209,.6);
 }
-.construct-ico{
-    width:68px; height:68px; margin:0 auto 14px; border-radius:50%;
-    background:linear-gradient(135deg, var(--yellow), var(--yellow-700)); color:var(--teal-900);
-    display:flex; align-items:center; justify-content:center;
-    box-shadow:0 12px 24px -12px rgba(201,210,0,.7);
-}
-
 
 /* =========================================================
    وضع التطبيق: شريط سفلي، بطاقة رئيسية، ورقة سفلية، حالة الطلب
    ========================================================= */
 .app-shell{padding-bottom:calc(86px + env(safe-area-inset-bottom));}
 .app-header{padding-top:calc(14px + env(safe-area-inset-top));}
-body.has-live .app-shell{padding-bottom:calc(176px + env(safe-area-inset-bottom));}
 
 /* الشريط السفلي */
 .tabbar{
@@ -655,7 +640,7 @@ body.has-live .app-shell{padding-bottom:calc(176px + env(safe-area-inset-bottom)
     border-radius:24px 24px 0 0; border:1px solid rgba(255,255,255,.9); border-bottom:0;
     box-shadow:0 -14px 34px -20px rgba(10,53,54,.45);
 }
-body:not(.authed) .tabbar, body:not(.authed) .live-bar{display:none;}
+body:not(.authed) .tabbar{display:none;}
 .tab{
     flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:2px 0 0;
     font-size:11px; font-weight:700; color:var(--ink-soft); font-family:var(--font-body);
@@ -704,39 +689,14 @@ body:not(.authed) .tabbar, body:not(.authed) .live-bar{display:none;}
 .modal.show{animation:fadeIn .2s var(--ease-out);}
 
 /* حالة الطلب الحية */
-.live-bar{
-    position:fixed; inset-inline:12px; bottom:calc(84px + env(safe-area-inset-bottom)); z-index:39;
-    max-width:616px; margin-inline:auto; padding:12px 14px 12px;
-    background:var(--teal-800); color:var(--cream); border-radius:22px;
-    box-shadow:0 20px 36px -16px rgba(10,53,54,.8);
-    transform:translateY(24px); opacity:0; visibility:hidden; pointer-events:none;
-    transition:transform .35s var(--ease-spring), opacity .2s, visibility 0s .35s;
-}
-.live-bar.show{transform:none; opacity:1; visibility:visible; pointer-events:auto; transition:transform .35s var(--ease-spring), opacity .2s, visibility 0s;}
-.lv-top{display:flex; align-items:center; gap:10px;}
-.lv-dot{width:10px; height:10px; border-radius:50%; background:var(--yellow); box-shadow:0 0 0 0 rgba(232,239,68,.6); animation:lvRing 1.8s ease-out infinite; flex:0 0 auto;}
-@keyframes lvRing{to{box-shadow:0 0 0 10px rgba(232,239,68,0);}}
-.lv-txt{flex:1; min-width:0; display:flex; flex-direction:column; line-height:1.35;}
-.lv-txt b{font-size:13.5px; font-weight:800;}
-.lv-txt small{font-size:11.5px; font-weight:600; opacity:.8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-.lv-x{width:30px; height:30px; border-radius:50%; background:rgba(243,240,231,.14); color:var(--cream); display:flex; align-items:center; justify-content:center; flex:0 0 auto;}
-.lv-x svg{width:14px; height:14px;}
-.lv-track{display:flex; gap:6px; margin-top:11px;}
-.lv-track span{flex:1; font-size:10.5px; font-weight:700; opacity:.55; display:flex; flex-direction:column; gap:6px;}
-.lv-track i{display:block; height:5px; border-radius:5px; background:rgba(243,240,231,.3); overflow:hidden; position:relative;}
-.lv-track .done{opacity:1;} .lv-track .done i{background:var(--yellow);}
-.lv-track .act{opacity:1;} .lv-track .act i::after{content:""; position:absolute; inset:0; width:55%; background:var(--yellow); border-radius:5px; animation:lvFill 1.8s ease-in-out infinite;}
+
 @keyframes lvFill{0%{transform:translateX(120%);} 100%{transform:translateX(-120%);}}
 
 /* هياكل التحميل */
-.sk-row{display:flex; align-items:center; justify-content:space-between; height:56px; margin-bottom:10px; padding:0 16px; border-radius:var(--r-md); background:rgba(255,255,255,.7);}
-.sk-a,.sk-b{display:block; height:14px; border-radius:8px; background:linear-gradient(90deg,rgba(14,58,59,.07) 25%,rgba(37,206,209,.2) 50%,rgba(14,58,59,.07) 75%); background-size:200% 100%; animation:skMove 1.1s linear infinite;}
-.sk-a{width:46%;} .sk-b{width:52px; height:26px; border-radius:12px;}
-@keyframes skMove{to{background-position:-200% 0;}}
 
 /* الشاشة الكبيرة */
 @media (min-width:1024px){ .tabbar{border-radius:24px 24px 0 0;} }
-@media print{ .tabbar,.live-bar{display:none !important;} }
+@media print{ .tabbar{display:none !important;} }
 
 /* =========================================================
    الطلبات: بطاقات، حالات، خط زمني، إحصاءات (مشترك)
@@ -834,14 +794,11 @@ body:not(.authed) .tabbar, body:not(.authed) .live-bar{display:none;}
 /* التنبيه المنبثق */
 .toast{position:fixed; inset-inline:16px; top:calc(74px + env(safe-area-inset-top)); z-index:95; max-width:420px; margin-inline:auto; padding:13px 18px; border-radius:18px; background:var(--teal-900); color:var(--cream); font-size:13px; font-weight:700; text-align:center; box-shadow:0 18px 34px -14px rgba(10,53,54,.8); transform:translateY(-16px); opacity:0; pointer-events:none; transition:transform .3s var(--ease-spring), opacity .2s;}
 .toast.show{transform:none; opacity:1;}
-.live-bar{cursor:pointer;}
-.lv-track span{font-size:10px;}
 
 .tab .ti{position:relative;}
 .tb{position:absolute; top:-3px; inset-inline-end:8px; min-width:17px; height:17px; padding:0 4px; border-radius:99px; background:var(--yellow); color:var(--teal-900); font-style:normal; font-size:10.5px; font-weight:800; line-height:17px; text-align:center; box-shadow:0 0 0 2px #fff; display:none;}
 .tb.on{display:block;}
-.action-card.mini.wide{grid-column:1 / -1; flex-direction:row; align-items:center; padding:14px 16px;}
-.action-card.mini.wide .txt p{font-size:11.5px;}
+
 .app-home .stat-row{margin-top:2px;}
 .modal-card{max-height:92vh; overflow-y:auto; overscroll-behavior:contain;}
 
