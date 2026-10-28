@@ -1,5 +1,7 @@
 /* =========================================================
-   HIGHWAY Delivery — لوحة تحكم المنسقين
+   HIGHWAY Admin Panel — لوحة الإدارة والعمليات
+   الأساس: الدخول، تحضير الطلبات، لوحة الطلبات، تعيين الكباتن.
+   الإضافات (الكباتن، التسويات، الإسناد التلقائي، الخرائط) في disp-v2.js
    ========================================================= */
 
 const ICONS = {
@@ -53,18 +55,11 @@ let state = { pickup:{ name:"", isCustom:false } };
 let currentScreen = 'screen-dashboard';
 
 /* ---------- أيقونات الشاشة الافتتاحية (طعام) ---------- */
-const FOOD_ICONS = [
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11c0-3.5 3.6-6 8-6s8 2.5 8 6H4Z"/><path d="M3 14.5h18"/><path d="M5 17.5h14v.5a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-.5Z"/></svg>',
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3C8 3 4.5 4.5 2.5 7L12 21 21.5 7C19.5 4.5 16 3 12 3Z"/><circle cx="10" cy="9" r="1.2"/><circle cx="14" cy="11" r="1.2"/><circle cx="12" cy="15" r="1"/></svg>',
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h12v6a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5V8Z"/><path d="M17 10h1.5a2.5 2.5 0 0 1 0 5H17"/><path d="M8 3v2M11 3v2M14 3v2"/></svg>',
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v7a2 2 0 0 0 2 2v9"/><path d="M10 3v7a2 2 0 0 1-2 2"/><path d="M17 3c-2 1.5-3 4-3 7h3v11"/></svg>',
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11a5 5 0 0 1 10 0"/><path d="M6.5 11h11L12 21 6.5 11Z"/></svg>',
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14l-1 12H6L5 8Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>'
-];
+
 
 function buildSplashIcons() {
     const wrap = document.getElementById('splashIcons');
-    const SPL = window.HWFood ? HWFood.splashSet() : FOOD_ICONS;
+    const SPL = HWFood.splashSet();   // رسومات الطعام المشتركة (hw-food.js)
     for (let i = 0; i < 18; i++) {
         const el = document.createElement('div');
         el.className = 'float-icon';
@@ -644,7 +639,7 @@ function applyFilter(list, f) {
 function onOrders(list) {
     allOrders = list;
     if (prevIds) {
-        list.forEach(o => { if (!prevIds[o.id] && (o.source === 'store' || o.kind === 'market') && o.status === 'new') { HWOrders.toast((o.kind === 'market' ? 'طلب عميل جديد من ' : 'طلب جديد من ') + o.storeName + ' ' + o.code); buzz(30); } });
+        list.forEach(o => { if (!prevIds[o.id] && (o.source === 'store' || o.kind === 'market') && o.status === 'new') { HWOrders.toast((o.kind === 'market' ? 'طلب جديد من التطبيق: ' : 'طلب جديد من ') + o.storeName + ' ' + o.code); buzz(30); } });
     }
     prevIds = {}; list.forEach(o => { prevIds[o.id] = 1; });
     renderBoard();
@@ -687,14 +682,15 @@ function closeOrderSheet() { openSheetId = null; const s = document.getElementBy
 function renderSheet(id) {
     const o = HWOrders.get(id), body = document.getElementById('orderSheetBody');
     if (!o) { closeOrderSheet(); return; }
-    const rows = [['المتجر / المصدر', o.storeName + (o.kind === 'market' ? ' (طلب عميل)' : o.source === 'store' ? ' (طلب من الموقع)' : ' (منسق)')], ['وقت الطلب', HWOrders.fmtTime(o.createdAt)]];
+    const rows = [['المتجر / المصدر', o.storeName + (o.kind === 'market' ? ' (من التطبيق)' : o.source === 'store' ? ' (طلب من الموقع)' : ' (لوحة الإدارة)')], ['وقت الطلب', HWOrders.fmtTime(o.createdAt)]];
     if (o.orderValue) rows.push(['قيمة الطلب', o.orderValue + ' د.أ']);
-    if (o.price) rows.push(['أجرة التوصيل', o.price + ' دينار']);
+    if (o.price) rows.push(['رسوم التوصيل', o.price + ' دينار']);
     if (o.notes) rows.push(['ملاحظات', o.notes]);
+    if (o.discount) rows.push(['خصم العرض', '−' + HWOrders.money(o.discount) + ' د.أ' + (o.offerTitle ? ' (' + o.offerTitle + ')' : '')]);
     const mk = HWOrders.isMarket(o), sl = HWOrders.settle(o);
     if (mk) { rows.push(['العميل', (o.customer.name || '') + ' · ' + (o.customer.phone || '')], ['العنوان', o.address.area + ' · ' + o.address.details], ['حالة المتجر', ({ pending: 'بانتظار القبول', preparing: 'قيد التحضير', ready: 'جاهز', rejected: 'مرفوض' })[o.storeState] || '-'], ['المنتجات', o.items.map(l => l.qty + '× ' + l.name).join('، ')], ['يدفعه الكابتن للمتجر', HWOrders.money(sl.items) + ' د.أ'], ['يحصّله من العميل', HWOrders.money(sl.collected) + ' د.أ']); }
     if (o.offerTo && HWOrders.offerable(o)) rows.push(['معروض الآن على', (o.offerName || '') + (o.offerKm != null ? ' · ' + o.offerKm + ' كم' : '')]);
-    if (HWOrders.isActive(o) || o.status === 'delivered') rows.push(['عمولة الشركة', HWOrders.money(sl.commission) + ' د.أ'], ['صافي الكابتن', HWOrders.money(sl.net) + ' د.أ']);
+    if (HWOrders.isActive(o) || o.status === 'delivered') rows.push(['عمولة المنصة', HWOrders.money(sl.commission) + ' د.أ'], ['صافي الكابتن', HWOrders.money(sl.net) + ' د.أ']);
     body.innerHTML =
         '<div class="sh-head"><div><small>تفاصيل الطلب</small><h3>' + HWOrders.esc(o.code) + '</h3></div><span class="oc-chip">' + HWOrders.SHORT[o.status] + '</span></div>' +
         '<div class="s-' + o.status + '">' + HWOrders.routeRows(o) + '</div>' +

@@ -20,11 +20,11 @@ function renderCaps() {
     });
     const tot = rows.reduce((a, r) => { a.n += r.n; a.fee += r.t.fee; a.com += r.t.com; return a; }, { n: 0, fee: 0, com: 0 });
     box.innerHTML =
-        '<div class="stat-grid"><div class="stat hot"><b>' + onl + '</b><small>متصلون الآن</small></div><div class="stat"><b>' + list.length + '</b><small>إجمالي الكباتن</small></div><div class="stat"><b>' + tot.n + '</b><small>طلبات مسلّمة</small></div><div class="stat"><b>' + HWOrders.money(tot.com) + '</b><small>عمولة الشركة د.أ</small></div></div>' +
+        '<div class="stat-grid"><div class="stat hot"><b>' + onl + '</b><small>متصلون الآن</small></div><div class="stat"><b>' + list.length + '</b><small>إجمالي الكباتن</small></div><div class="stat"><b>' + tot.n + '</b><small>طلبات مسلّمة</small></div><div class="stat"><b>' + HWOrders.money(tot.com) + '</b><small>عمولة المنصة د.أ</small></div></div>' +
         '<div class="seg" id="capSeg">' + [['today', 'اليوم'], ['week', '٧ أيام'], ['all', 'الكل']].map(r => '<button type="button" data-r="' + r[0] + '"' + (capRange === r[0] ? ' class="on"' : '') + '>' + r[1] + '</button>').join('') + '</div>' +
         '<button type="button" class="submit-btn" style="margin:4px 0 14px" onclick="openCapSheet(null)"><span class="btn-label">+ إضافة كابتن</span></button>' +
         (rows.length ? rows.map(r => '<div class="cap-card' + (r.c.active === false ? ' off' : '') + '" data-cid="' + CH(r.c.id) + '"><div class="cap-top"><span class="cap-dot' + (r.c.online && r.c.active !== false ? ' on' : '') + '"></span><div class="cap-id"><b>' + CH(r.c.name) + (r.c.demo ? ' <em class="demo-tag">تجريبي</em>' : '') + '</b><small dir="ltr">' + CH(r.c.phone) + '</small></div><span class="cap-st">' + (r.c.active === false ? 'موقوف' : r.act ? 'في مهمة ' + CH(r.act.code) : r.c.online ? 'متاح' : 'غير متصل') + '</span></div>' +
-            '<div class="cap-nums"><div><small>مسلّمة</small><b>' + r.n + '</b></div><div><small>التوصيل</small><b>' + HWOrders.money(r.t.fee) + '</b></div><div><small>عمولة الشركة</small><b>' + HWOrders.money(r.t.com) + '</b></div><div><small>صافيه</small><b>' + HWOrders.money(r.t.net) + '</b></div></div></div>').join('')
+            '<div class="cap-nums"><div><small>مسلّمة</small><b>' + r.n + '</b></div><div><small>التوصيل</small><b>' + HWOrders.money(r.t.fee) + '</b></div><div><small>عمولة المنصة</small><b>' + HWOrders.money(r.t.com) + '</b></div><div><small>صافيه</small><b>' + HWOrders.money(r.t.net) + '</b></div></div></div>').join('')
             : '<div class="empty-orders">لا يوجد كباتن بعد، أضف أول كابتن</div>');
 }
 function openCapSheet(id) {
