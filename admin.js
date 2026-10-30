@@ -8,11 +8,9 @@
       أهداف الكباتن، الإعلانات، فريق العمليات
    يعتمد على: hw-orders.js, hw-biz.js, hw-map.js, script.js, disp-v2.js
    ========================================================= */
-const logCol = HWDB.col('log'), issuesCol = HWDB.col('issues'), stCol = HWDB.col('storestate'), acctCol = HWDB.col('accounts'), staffCol = HWDB.col('staff');
+const logCol = HWDB.col('log'), issuesCol = HWDB.col('issues'), stCol = HWDB.col('storestate'), staffCol = HWDB.col('staff');
 const AE = HWOrders.esc, AM = HWOrders.money, A$ = (id) => document.getElementById(id);
-const STORES_ = HW_CONFIG.stores || [];
 let mgTab = 'stores', issFilter = 'open', admEdit = null;
-function storeName(id) { const s = STORES_.filter(x => x.id === id)[0]; return s ? s.name : id; }
 function scr() { const a = document.querySelector('.screen.active'); return a ? a.id : ''; }
 function admSheet(html) { A$('admSheetBody').innerHTML = html; A$('admSheet').classList.add('show'); }
 function closeAdm() { A$('admSheet').classList.remove('show'); }
@@ -142,55 +140,14 @@ function renderIssueBadge() {
 /* =========================================================
    5) الإدارة
    ========================================================= */
-const MG_TABS = [['stores', 'المتاجر'], ['offers', 'العروض'], ['promos', 'أكواد الخصم'], ['targets', 'أهداف الكباتن'], ['ann', 'الإعلانات'], ['team', 'الفريق']];
+const MG_TABS = [['stores', 'المتاجر'], ['prices', 'أسعار التوصيل'], ['offers', 'العروض'], ['promos', 'أكواد الخصم'], ['targets', 'أهداف الكباتن'], ['ann', 'الإعلانات'], ['team', 'الفريق']];
 function renderManage() {
     const box = A$('mgBody'); if (!box) return;
     const open = issuesCol.list().filter(i => i.status !== 'resolved').length;
     box.innerHTML = '<div class="mg-quick"><button type="button" onclick="goTo(\'screen-issues\')"><b>' + open + '</b><span>بلاغات مفتوحة</span></button><button type="button" onclick="goTo(\'screen-log\')"><b>' + logCol.list().length + '</b><span>سجل النشاط</span></button></div>' +
         '<div class="seg mg-seg">' + MG_TABS.map(t => '<button type="button" class="' + (mgTab === t[0] ? 'on' : '') + '" onclick="mgTab=\'' + t[0] + '\';renderManage()">' + t[1] + '</button>').join('') + '</div>' +
-        ({ stores: mgStores, offers: mgOffers, promos: mgPromos, targets: mgTargets, ann: mgAnn, team: mgTeam })[mgTab]();
+        ({ stores: mgStores, prices: mgPrices, offers: mgOffers, promos: mgPromos, targets: mgTargets, ann: mgAnn, team: mgTeam })[mgTab]();
 }
-
-/* ---------- المتاجر ---------- */
-function mgStores() {
-    return STORES_.map(s => {
-        const st = stCol.get(s.id) || {}, ss = HWBiz.storeStatus(st), ac = acctCol.get(s.id) || {}, r = HWBiz.storeRating(s.id, allOrders);
-        const today = allOrders.filter(o => o.storeId === s.id && HWOrders.isToday(o.createdAt));
-        return '<div class="mg-card' + (ac.active === false ? ' off' : '') + '"><div class="mg-top"><img src="avatars/' + AE(s.id) + '.jpg" alt="" onerror="this.src=\'logo-icon.png\'"><div><b>' + AE(s.name) + '</b><small>' + AE(s.cat) + ' · ' + (ac.active === false ? 'الحساب موقوف' : ss.open ? 'مفتوح' : AE(ss.label || 'مغلق')) + (r.n ? ' · ★ ' + r.avg.toFixed(1) : '') + ' · ' + today.length + ' طلب اليوم</small></div>' +
-            '<button type="button" class="ghost-btn" onclick="openStoreAdm(\'' + s.id + '\')">إدارة</button></div></div>';
-    }).join('');
-}
-function openStoreAdm(sid) {
-    const st = stCol.get(sid) || {}, ac = acctCol.get(sid) || {}, ss = HWBiz.storeStatus(st), cover = HWBiz.cover(sid, st);
-    admEdit = sid;
-    admSheet(aHead('المتاجر', AE(storeName(sid))) +
-        '<div class="cov-prev">' + (cover ? '<img src="' + AE(cover) + '" alt="">' : '<span>بدون صورة غلاف: يظهر رسم القسم للعملاء</span>') + '</div>' +
-        '<div class="btn-row"><label class="ghost-btn file-btn">رفع صورة غلاف<input type="file" accept="image/*" onchange="uploadCover(this.files[0])"></label>' + (st.cover ? '<button type="button" class="ghost-btn" onclick="setCover(\'\')">إزالة الصورة</button>' : '') + '</div>' +
-        '<div class="sh-rows"><div><span>الحالة الآن</span><b>' + (ss.open ? 'مفتوح' : AE(ss.label || 'مغلق')) + '</b></div><div><span>وقت التحضير</span><b>' + (st.prepMin || 20) + ' د</b></div><div><span>الموقع</span><b>' + (st.lat != null ? 'محدد ✓' : 'غير محدد') + '</b></div></div>' +
-        '<div class="btn-row" style="margin-top:12px"><button type="button" class="ghost-btn" onclick="storeOpen(\'' + sid + '\',' + (st.open === false) + ')">' + (st.open === false ? 'فتح المتجر' : 'إغلاق المتجر') + '</button>' + (ss.paused ? '<button type="button" class="ghost-btn" onclick="storePause(\'' + sid + '\',0)">إلغاء الإيقاف المؤقت</button>' : '<button type="button" class="ghost-btn" onclick="storePause(\'' + sid + '\',30)">إيقاف 30 د</button>') + '</div>' +
-        '<h4 class="adm-sub">حساب الدخول (Partner App)</h4>' + fld('stPass', 'كلمة مرور جديدة <span class="opt">(اتركها فارغة لعدم التغيير)</span>', '', 'type="text" autocomplete="off" dir="ltr"') +
-        '<div class="btn-row"><button type="button" class="ghost-btn' + (ac.active === false ? '' : ' dng') + '" onclick="storeAcct(\'' + sid + '\',' + (ac.active === false) + ')">' + (ac.active === false ? 'تفعيل الحساب' : 'إيقاف الحساب') + '</button><button type="button" class="submit-btn" onclick="saveStorePass(\'' + sid + '\')"><span class="btn-label">حفظ كلمة المرور</span></button></div>');
-}
-function storeOpen(sid, v) { stCol.patch(sid, { open: v, pausedUntil: 0 }, true); logAct('store', (v ? 'فتح ' : 'إغلاق ') + storeName(sid)); openStoreAdm(sid); }
-function storePause(sid, m) { stCol.patch(sid, { pausedUntil: m ? Date.now() + m * 60000 : 0 }, true); logAct('store', m ? 'إيقاف ' + storeName(sid) + ' مؤقتًا ' + m + ' د' : 'إلغاء إيقاف ' + storeName(sid)); openStoreAdm(sid); }
-function storeAcct(sid, v) { if (!v && !confirm('إيقاف حساب ' + storeName(sid) + '؟ لن يستطيع الدخول للتطبيق.')) return; acctCol.patch(sid, { active: v }, true); logAct('store', (v ? 'تفعيل حساب ' : 'إيقاف حساب ') + storeName(sid)); openStoreAdm(sid); }
-function saveStorePass(sid) {
-    const p = A$('stPass').value.trim(); if (p.length < 6) { HWOrders.toast('كلمة المرور 6 أحرف على الأقل'); return; }
-    acctCol.patch(sid, { hash: sha256('HIGHWAY|' + sid + '|' + p), at: Date.now() }, true); logAct('store', 'تغيير كلمة مرور ' + storeName(sid));
-    HWOrders.toast('تم حفظ كلمة المرور الجديدة'); A$('stPass').value = '';
-}
-/* صورة الغلاف: تُصغَّر إلى 1200×600 قبل الحفظ */
-function uploadCover(file) {
-    if (!file) return;
-    const fr = new FileReader();
-    fr.onload = () => { const im = new Image(); im.onload = () => {
-        const W = 1200, Hh = 600, c = document.createElement('canvas'); c.width = W; c.height = Hh;
-        const r = Math.max(W / im.width, Hh / im.height), w = im.width * r, h = im.height * r;
-        c.getContext('2d').drawImage(im, (W - w) / 2, (Hh - h) / 2, w, h); setCover(c.toDataURL('image/jpeg', .78));
-    }; im.src = fr.result; };
-    fr.readAsDataURL(file);
-}
-function setCover(data) { stCol.patch(admEdit, { cover: data }, true); logAct('store', (data ? 'تحديث' : 'إزالة') + ' صورة غلاف ' + storeName(admEdit)); HWOrders.toast('تم الحفظ'); setTimeout(() => openStoreAdm(admEdit), 150); }
 
 /* ---------- العروض (لكل المتاجر) ---------- */
 function mgOffers() {
@@ -200,9 +157,9 @@ function mgOffers() {
             '<button type="button" class="sw sm' + (o.active !== false ? ' on' : '') + '" onclick="toggleCol(\'offers\',\'' + o.id + '\')" aria-label="تفعيل"></button><button type="button" class="more-link inl" onclick="openOfferAdm(\'' + o.id + '\')">تعديل</button></div></div>').join('') || '<div class="empty-orders">لا توجد عروض</div>');
 }
 function openOfferAdm(id) {
-    admEdit = id; const o = id ? HWBiz.offers.get(id) : { storeId: STORES_[0].id, title: '', percent: 10, minOrder: 0 };
+    admEdit = id; const o = id ? HWBiz.offers.get(id) : { storeId: (storesAll()[0] || {}).id, title: '', percent: 10, minOrder: 0 };
     admSheet(aHead('العروض', id ? 'تعديل العرض' : 'عرض جديد') +
-        '<div class="field"><label for="ofStore">المتجر</label><select id="ofStore">' + STORES_.map(s => '<option value="' + s.id + '"' + (s.id === o.storeId ? ' selected' : '') + '>' + AE(s.name) + '</option>').join('') + '</select></div>' +
+        '<div class="field"><label for="ofStore">المتجر</label><select id="ofStore">' + storesAll().map(s => '<option value="' + s.id + '"' + (s.id === o.storeId ? ' selected' : '') + '>' + AE(s.name) + '</option>').join('') + '</select></div>' +
         fld('ofTitle', 'العنوان', o.title) + fld('ofSub', 'تفاصيل <span class="opt">(اختياري)</span>', o.sub) +
         '<div class="two">' + fld('ofPct', 'الخصم ٪ (يتحمّله المتجر)', o.percent, 'type="number" min="0" max="50"') + fld('ofMin', 'الحد الأدنى', o.minOrder, 'type="number" min="0" step="0.5"') + '</div>' +
         fld('ofEnd', 'ينتهي في <span class="opt">(اختياري)</span>', dateVal(o.endsAt), 'type="date"') +
@@ -324,10 +281,10 @@ Object.assign(TAB_OF, { 'screen-manage': 'manage', 'screen-issues': 'manage', 's
     const _g = window.goTo;
     window.goTo = function (id) { _g(id); if (id === 'screen-dashboard') { opsSig = ''; setTimeout(renderHome, 60); } if (id === 'screen-manage') renderManage(); if (id === 'screen-issues') renderIssues(); if (id === 'screen-log') renderLog(); };
     const _r = window.renderBoard;
-    window.renderBoard = function () { _r(); if (scr() === 'screen-dashboard') renderHome(); if (scr() === 'screen-manage') renderManage(); };
+    window.renderBoard = function () { _r(); if (scr() === 'screen-dashboard') renderHome(); if (scr() === 'screen-manage' && mgTab !== 'prices') renderManage(); };
 })();
-function refreshAdm() { const s = scr(); if (s === 'screen-dashboard') renderHome(); else if (s === 'screen-manage') renderManage(); else if (s === 'screen-issues') renderIssues(); else if (s === 'screen-log') renderLog(); renderIssueBadge(); }
-[logCol, issuesCol, stCol, acctCol, staffCol, HWBiz.offers, HWBiz.promos, HWBiz.targets, HWBiz.announcementsCol].forEach(c => c.subscribe(refreshAdm));
+function refreshAdm() { const s = scr(); if (s === 'screen-dashboard') renderHome(); else if (s === 'screen-manage' && mgTab !== 'prices') renderManage(); else if (s === 'screen-issues') renderIssues(); else if (s === 'screen-log') renderLog(); renderIssueBadge(); }
+[logCol, issuesCol, stCol, staffCol, HWBiz.offers, HWBiz.promos, HWBiz.targets, HWBiz.announcementsCol].forEach(c => c.subscribe(refreshAdm));
 capsCol.subscribe(() => { if (scr() === 'screen-dashboard') renderHome(); });
 let lastIss = null;
 issuesCol.subscribe(l => {                               // بلاغ جديد من كابتن: تنبيه صوتي
@@ -336,3 +293,6 @@ issuesCol.subscribe(l => {                               // بلاغ جديد م
     lastIss = ids;
 });
 document.addEventListener('DOMContentLoaded', () => setTimeout(renderHome, 400));
+
+/* الإشعارات الحقيقية: بلاغات وطلبات متأخرة حتى واللوحة مغلقة */
+HWPush.init('admin', () => (currentUser ? currentUser.id : ''), { open: (id) => { if (HWOrders.get(id)) openOrderSheet(id); else goTo('screen-issues'); } });
