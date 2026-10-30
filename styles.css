@@ -827,3 +827,54 @@ body:not(.authed) .tabbar{display:none;}
 .act-map{position:relative;height:240px;border-radius:24px;overflow:hidden;margin:0 0 14px;box-shadow:var(--shadow-neu);background:linear-gradient(135deg,#dff6f6,#F3F0E7)}.act-map .lmap{position:absolute;inset:0}
 .cap-dot{width:12px;height:12px;border-radius:50%;background:#cbd5d5;flex:none}.cap-dot.on{background:var(--teal);box-shadow:0 0 0 4px rgba(37,206,209,.25)}
 
+/* ================= المرحلة 4: لوحة الإدارة ================= */
+.kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 14px}
+.kpi{display:block;text-align:start;border:0;font:inherit;color:var(--ink);background:var(--cream);border-radius:18px;padding:12px 14px}
+button.kpi{cursor:pointer}
+.kpi.hot{background:var(--teal)}.kpi.warn{background:var(--yellow)}
+.kpi small{display:block;font-size:11.5px;font-weight:700;color:var(--ink-soft)}
+.kpi b{display:block;font-size:24px;font-weight:800;line-height:1.2}
+.kpi em{display:block;font-style:normal;font-size:11px;font-weight:700;color:var(--ink-soft)}
+.ops-map{height:280px}
+.ops-lbl{position:absolute;top:12px;inset-inline-start:12px;z-index:500;background:#fff;border-radius:99px;padding:6px 12px;font-size:12px;font-weight:800;color:var(--ink);box-shadow:0 6px 14px -8px rgba(14,58,59,.5)}
+.ops-key{position:absolute;bottom:10px;inset-inline-start:10px;inset-inline-end:10px;z-index:500;display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;background:rgba(255,255,255,.92);border-radius:12px;padding:6px 10px;font-size:10.5px;font-weight:700;color:var(--ink)}
+.ops-key i{width:10px;height:10px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(14,58,59,.2)}
+.ops-key i.n{background:#E8EF44}.ops-key i.a{background:#25CED1}.ops-key i.p{background:#0E3A3B}
+/* التسوية داخل ورقة الكابتن */
+.stl{margin-top:16px;padding-top:14px;border-top:1.5px dashed var(--cream-line, #E7E2D3)}
+.stl-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.stl-h b{font-size:15px}.stl-h span{font-size:12px;font-weight:700;color:var(--ink-soft)}
+.stl-k{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.stl-k div{background:var(--cream);border-radius:14px;padding:10px}.stl-k small{display:block;font-size:11px;font-weight:700;color:var(--ink-soft)}.stl-k b{font-size:17px}
+.stl-k .due{background:var(--yellow)}
+.btn-row .ghost-btn:disabled,.btn-row .submit-btn:disabled{opacity:.45;pointer-events:none}
+/* الإدارة */
+.mg-quick{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.mg-quick button{border:0;font:inherit;background:var(--ink);color:var(--cream);border-radius:18px;padding:12px 14px;text-align:start;cursor:pointer}
+.mg-quick b{display:block;font-size:22px;color:var(--yellow)}.mg-quick span{font-size:12px;font-weight:700}
+.mg-seg{margin-bottom:12px}
+.mg-add{margin:0 0 12px}
+.mg-note{margin:0 0 10px;font-size:12.5px}
+.mg-card{background:var(--cream);border-radius:18px;padding:10px 12px;margin:0 0 8px}
+.mg-card.off{opacity:.55}
+.mg-top{display:flex;align-items:center;gap:10px}
+.mg-top>div{flex:1;min-width:0}.mg-top b{display:block;font-size:14px}.mg-top small{display:block;font-size:11.5px;color:var(--ink-soft);font-weight:600;line-height:1.5}
+.mg-top img{width:44px;height:44px;border-radius:50%;object-fit:cover;border:3px solid var(--yellow);background:#fff;flex:none}
+.mg-ic{flex:none;width:40px;height:40px;border-radius:13px;background:#fff;display:grid;place-items:center;font-weight:900;color:var(--teal-800)}
+.mg-ic.code{font-size:11px;letter-spacing:.5px}
+.cov-prev{height:140px;border-radius:18px;overflow:hidden;background:var(--teal);display:grid;place-items:center;margin:4px 0 10px;color:var(--ink);font-size:12.5px;font-weight:700;text-align:center;padding:0}
+.cov-prev img{width:100%;height:100%;object-fit:cover}
+.file-btn{position:relative;overflow:hidden;cursor:pointer;text-align:center}
+.file-btn input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.adm-sub{margin:18px 0 8px;font-size:14px}
+.chk{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;margin:4px 0 14px}.chk input{width:18px;height:18px;accent-color:#0E3A3B}
+/* البلاغات والسجل */
+.iss-card{background:var(--cream);border-radius:18px;padding:12px 14px;margin:0 0 10px;border-inline-start:5px solid var(--yellow)}
+.iss-card.done{border-color:var(--teal);opacity:.75}
+.iss-top{display:flex;justify-content:space-between;gap:8px}.iss-top b{font-size:14.5px}.iss-top span{font-size:11.5px;color:var(--ink-soft);font-weight:700}
+.iss-card small{display:block;font-size:12px;color:var(--ink-soft);font-weight:600;margin:3px 0}
+.iss-card p{margin:6px 0;font-size:13px}.iss-card .res{color:var(--teal-800);font-weight:700}
+.iss-card .btn-row{margin-top:8px}.iss-card a.ghost-btn{text-decoration:none;text-align:center}
+.lg-row{display:flex;gap:10px;align-items:flex-start;padding:10px 4px;border-bottom:1px solid var(--cream-line, #E7E2D3)}
+.lg-ic{flex:none;width:34px;height:34px;border-radius:11px;background:var(--cream);display:grid;place-items:center;font-size:15px}
+.lg-row b{display:block;font-size:13px;font-weight:700;line-height:1.5}.lg-row small{font-size:11.5px;color:var(--ink-soft)}
+.field select{width:100%;padding:13px 14px;border-radius:var(--r-sm,14px);border:1.5px solid transparent;background:var(--cream);font:inherit;color:var(--ink)}

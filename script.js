@@ -209,15 +209,20 @@ function sha256(str) {
     return h.map(x => (x >>> 0).toString(16).padStart(8, '0')).join('');
 }
 
+/* أعضاء فريق العمليات (منسقون) تضيفهم الإدارة من "الإدارة ← الفريق" */
+function staffUsers() {
+    return HWDB.col('staff').list().filter(s => s.active !== false).map(s => ({ id: s.id, names: [normUser(s.user)], hash: s.hash, label: s.name, role: s.role || 'dispatcher' }));
+}
+function allUsers() { return USERS.concat(staffUsers()); }
 function findUserByName(name) {
     const n = normUser(name);
-    return n ? USERS.find(u => u.names.includes(n)) || null : null;
+    return n ? allUsers().find(u => u.names.includes(n)) || null : null;
 }
 
 function readSession() {
     let id = null;
     try { id = localStorage.getItem(SESSION_KEY) || sessionStorage.getItem(SESSION_KEY); } catch (e) {}
-    return USERS.find(u => u.id === id) || null;
+    return allUsers().find(u => u.id === id) || null;
 }
 function saveSession(user, remember) {
     try {
@@ -247,11 +252,12 @@ function setAvatar(img, u) {
 }
 function fillUserUI(u) {
     ['avatarImg', 'umImg', 'pfImg'].forEach(id => setAvatar(document.getElementById(id), u));
-    document.getElementById('umName').textContent = 'HIGHWAY Delivery';
-    document.getElementById('umRole').textContent = 'مسؤول النظام';
-    document.getElementById('pfName').textContent = 'HIGHWAY Delivery';
+    const nm = u.label || 'HIGHWAY Delivery', role = u.role === 'dispatcher' ? 'منسق عمليات' : 'مسؤول النظام';
+    document.getElementById('umName').textContent = nm;
+    document.getElementById('umRole').textContent = role;
+    document.getElementById('pfName').textContent = nm;
     document.getElementById('pfHandle').textContent = '@' + u.names[0];
-    document.getElementById('pfChip').textContent = 'مسؤول النظام';
+    document.getElementById('pfChip').textContent = role;
     document.getElementById('pfUser').textContent = u.names[0];
 }
 function closeUserMenu() {
@@ -639,7 +645,7 @@ function applyFilter(list, f) {
 function onOrders(list) {
     allOrders = list;
     if (prevIds) {
-        list.forEach(o => { if (!prevIds[o.id] && (o.source === 'store' || o.kind === 'market') && o.status === 'new') { HWOrders.toast((o.kind === 'market' ? 'طلب جديد من التطبيق: ' : 'طلب جديد من ') + o.storeName + ' ' + o.code); buzz(30); } });
+        list.forEach(o => { if (!prevIds[o.id] && (o.source === 'store' || o.kind === 'market') && o.status === 'new') { HWOrders.toast((o.kind === 'market' ? 'طلب جديد من التطبيق: ' : 'طلب جديد من ') + o.storeName + ' ' + o.code); HWNotify.play('order'); HWNotify.notify('HIGHWAY · طلب جديد', o.storeName + ' ' + o.code); buzz(30); } });
     }
     prevIds = {}; list.forEach(o => { prevIds[o.id] = 1; });
     renderBoard();
@@ -688,9 +694,15 @@ function renderSheet(id) {
     if (o.notes) rows.push(['ملاحظات', o.notes]);
     if (o.discount) rows.push(['خصم العرض', '−' + HWOrders.money(o.discount) + ' د.أ' + (o.offerTitle ? ' (' + o.offerTitle + ')' : '')]);
     const mk = HWOrders.isMarket(o), sl = HWOrders.settle(o);
-    if (mk) { rows.push(['العميل', (o.customer.name || '') + ' · ' + (o.customer.phone || '')], ['العنوان', o.address.area + ' · ' + o.address.details], ['حالة المتجر', ({ pending: 'بانتظار القبول', preparing: 'قيد التحضير', ready: 'جاهز', rejected: 'مرفوض' })[o.storeState] || '-'], ['المنتجات', o.items.map(l => l.qty + '× ' + l.name).join('، ')], ['يدفعه الكابتن للمتجر', HWOrders.money(sl.items) + ' د.أ'], ['يحصّله من العميل', HWOrders.money(sl.collected) + ' د.أ']); }
+    if (mk) { rows.push(['العميل', (o.customer.name || '') + ' · ' + (o.customer.phone || '')], ['العنوان', o.address.area + ' · ' + o.address.details], ['حالة المتجر', ({ pending: 'بانتظار القبول', preparing: 'قيد التحضير', ready: 'جاهز', rejected: 'مرفوض' })[o.storeState] || '-'], ['المنتجات', o.items.map(l => l.qty + '× ' + l.name + (l.opts && l.opts.length ? ' (' + HWBiz.optsText(l.opts) + ')' : '')).join('، ')], ['يدفعه الكابتن للمتجر', HWOrders.money(sl.items) + ' د.أ'], ['يحصّله من العميل', HWOrders.money(sl.collected) + ' د.أ']); }
     if (o.offerTo && HWOrders.offerable(o)) rows.push(['معروض الآن على', (o.offerName || '') + (o.offerKm != null ? ' · ' + o.offerKm + ' كم' : '')]);
     if (HWOrders.isActive(o) || o.status === 'delivered') rows.push(['عمولة المنصة', HWOrders.money(sl.commission) + ' د.أ'], ['صافي الكابتن', HWOrders.money(sl.net) + ' د.أ']);
+    if (o.promoCode) rows.push(['كود خصم (تتحمّله المنصة)', o.promoCode + ' · −' + HWOrders.money(o.promoAmount) + ' د.أ']);
+    if (o.scheduledFor) rows.push(['موعد التوصيل', 'مجدول ' + HWOrders.fmtTime(o.scheduledFor)]);
+    if (o.cancelReason) rows.push(['سبب الإلغاء', o.cancelReason]);
+    (o.reassigns || []).forEach(r => rows.push(['نقل ' + HWOrders.fmtTime(r.at), r.from + ' ← ' + r.to + ' · ' + r.reason]));
+    if (o.rating) rows.push(['تقييم العميل', 'المتجر ' + HWBiz.stars(o.rating.store) + (o.rating.captain ? ' · الكابتن ' + HWBiz.stars(o.rating.captain) : '') + (o.rating.comment ? ' · ' + o.rating.comment : '')]);
+    if (o.status === 'delivered' && HWOrders.isMarket(o)) rows.push(['رمز التسليم', o.pinOk === false ? 'سُلّم بدون رمز ⚠' : 'تم التحقق ✓']);
     body.innerHTML =
         '<div class="sh-head"><div><small>تفاصيل الطلب</small><h3>' + HWOrders.esc(o.code) + '</h3></div><span class="oc-chip">' + HWOrders.SHORT[o.status] + '</span></div>' +
         '<div class="s-' + o.status + '">' + HWOrders.routeRows(o) + '</div>' +
@@ -718,7 +730,9 @@ function openAssign(id) {
     document.getElementById('asName').value = o.captain ? o.captain.name : '';
     document.getElementById('asPhone').value = o.captain ? (o.captain.phone || '') : '';
     document.getElementById('asEta').value = '';
-    ['asNameField', 'asPhoneField', 'asEtaField'].forEach(f => setInvalid(f, false));
+    document.getElementById('asReason').value = '';
+    document.getElementById('asReasonField').style.display = o.captain && o.captain.name ? '' : 'none';
+    ['asNameField', 'asPhoneField', 'asEtaField', 'asReasonField'].forEach(f => setInvalid(f, false));
     closeOrderSheet(); if (window.renderAssignCaps) renderAssignCaps(o);
     document.getElementById('assignSheet').classList.add('show');
 }
@@ -732,12 +746,15 @@ function defaultEta() { const d = new Date(Date.now() + 20 * 60000); return Stri
 function submitAssign(wa) {
     const o = HWOrders.get(assignId); if (!o) return;
     const name = document.getElementById('asName').value.trim(), eta = document.getElementById('asEta').value || defaultEta(), phone = parsePhone(document.getElementById('asPhone').value);
-    setInvalid('asNameField', !name); setInvalid('asPhoneField', !phone.ok);
-    if (!name || !phone.ok) return;
+    const changing = o.captain && o.captain.name && o.captain.name !== name, reason = changing ? document.getElementById('asReason').value : '';
+    setInvalid('asNameField', !name); setInvalid('asPhoneField', !phone.ok); setInvalid('asReasonField', changing && !reason);
+    if (!name || !phone.ok || (changing && !reason)) return;
     const cd = HWDB.col('captains').list().filter(c => c.name === name)[0];
     const patch = { captain: Object.assign({ name: name, phone: phone.value }, cd ? { id: cd.id } : {}), eta: formatTime12h(eta), claimBy: cd ? cd.id : null, offerTo: null, offerAt: 0 };
     if (o.status === 'new') patch.status = 'accepted';
-    HWOrders.update(o.id, patch);
+    if (changing) patch.reassigns = (o.reassigns || []).concat([{ from: o.captain.name, to: name, reason, at: Date.now(), by: actorName() }]);
+    HWOrders.update(o.id, patch, changing ? 'reassigned' : null);
+    logAct(changing ? 'reassign' : 'assign', (changing ? 'نقل الطلب ' + o.code + ' من ' + o.captain.name + ' إلى ' + name + ' — ' + reason : 'إسناد الطلب ' + o.code + ' إلى ' + name));
     if (wa) {
         openWhatsApp(`📢 تنبيه: الكابتن في الطريق إليكم!
 
@@ -754,9 +771,12 @@ HIGHWAY Delivery | The Fastest Way to Your Orders`);
 function orderAct(act, id) {
     const o = HWOrders.get(id); if (!o) return;
     if (act === 'assign') return openAssign(id);
-    if (act === 'cancel') { if (!confirm('إلغاء الطلب ' + o.code + '؟')) return; HWOrders.update(id, { status: 'cancelled' }); HWOrders.toast('تم إلغاء الطلب'); return; }
-    if (act === 'picked') { HWOrders.update(id, { status: 'picked' }); HWOrders.toast('تم تسجيل استلام الطلب ' + o.code); }
-    if (act === 'delivered') { HWOrders.update(id, { status: 'delivered' }); HWOrders.toast('تم تسليم الطلب ' + o.code + ' ✓'); }
+    if (act === 'cancel') {
+        const why = prompt('سبب إلغاء الطلب ' + o.code + ':', 'طلب العميل'); if (why === null) return;
+        HWOrders.update(id, { status: 'cancelled', cancelReason: 'ألغت الإدارة الطلب' + (why ? ' (' + why + ')' : '') }); logAct('cancel', 'إلغاء الطلب ' + o.code + (why ? ' — ' + why : '')); HWOrders.toast('تم إلغاء الطلب'); return;
+    }
+    if (act === 'picked') { HWOrders.update(id, { status: 'picked' }); logAct('status', 'تسجيل استلام الطلب ' + o.code + ' يدويًا'); HWOrders.toast('تم تسجيل استلام الطلب ' + o.code); }
+    if (act === 'delivered') { HWOrders.update(id, { status: 'delivered' }); logAct('status', 'تسجيل تسليم الطلب ' + o.code + ' يدويًا'); HWOrders.toast('تم تسليم الطلب ' + o.code + ' ✓'); }
     buzz(16);
 }
 document.addEventListener('click', (e) => {
@@ -770,3 +790,15 @@ document.addEventListener('click', (e) => {
 document.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.classList && e.target.classList.contains('oc')) { e.preventDefault(); openOrderSheet(e.target.dataset.id); } });
 setInterval(() => { if (!document.hidden && allOrders.length) renderBoard(); }, 30000);
 HWOrders.subscribe(onOrders);
+
+/* ---------- تنبيه العمليات: رنين عند وجود طلب متأخر (المتجر لم يقبله، أو لم يُسند لكابتن) خلال 3 دقائق ---------- */
+window.HWNotifyAskPerm = true;
+function lateOrders() {
+    const now = Date.now(), late = 3 * 60000;
+    return allOrders.filter(o => o.status === 'new' && now - (o.createdAt || 0) > late && (o.storeState === 'pending' || HWOrders.offerable(o) || !HWOrders.isMarket(o)));
+}
+setInterval(() => {
+    if (!currentUser) return;
+    if (lateOrders().length) HWNotify.ring('admin-late', 'alert', 9000); else HWNotify.stop('admin-late');
+}, 5000);
+document.addEventListener('DOMContentLoaded', () => HWNotify.keepAwake(true));
