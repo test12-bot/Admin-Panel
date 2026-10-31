@@ -67,7 +67,7 @@ let autoOn = true, engineBusy = false, capMap = null, capLayer = null;
 settingsCol.subscribe(l => { const d = l.filter(x => x.id === 'dispatch')[0]; autoOn = !d || d.auto !== false; renderAuto(); runEngine(); });
 function setAuto(v) { settingsCol.patch('dispatch', { auto: v, by: 'dispatcher', at: Date.now() }, true); buzz(15); HWOrders.toast(v ? 'الإسناد التلقائي يعمل' : 'الإسناد اليدوي: اختر الكابتن بنفسك'); }
 /* متاح: متصل وظاهر حديثًا، أو مفعّل الإشعارات (تصله العروض والتطبيق مغلق) خلال 12 ساعة */
-function isLive(c) { const age = Date.now() - (c.lastSeen || 0); return c.active !== false && c.online && (!c.lastSeen || age < 120000 || (c.pushOn && age < 12 * 3600e3)); }
+function isLive(c) { const age = Date.now() - (c.lastSeen || 0), push = !!(HW_CONFIG.push && HW_CONFIG.push.server && c.pushOn); return c.active !== false && c.online && (!c.lastSeen || age < 120000 || (push && age < 12 * 3600e3)); }
 function busyIds() { const b = {}; allOrders.forEach(o => { if (o.captain && o.captain.id && (o.status === 'accepted' || o.status === 'picked')) b[o.captain.id] = 1; }); return b; }
 function offerLim() { return (HW_CONFIG.offerSeconds || 45) * 1000; }
 function liveOfferTo(skipId) { const t = {}; allOrders.forEach(o => { if (o.id !== skipId && o.offerTo && Date.now() - (o.offerAt || 0) < offerLim() + 2000 && HWOrders.offerable(o)) t[o.offerTo] = 1; }); return t; }
@@ -85,6 +85,7 @@ function runEngine() {
             if (o.offerTo && offered.indexOf(o.offerTo) < 0) offered.push(o.offerTo);            // انتهت مهلته
             const busy = busyIds(), pend = liveOfferTo(o.id);
             let cands = caps.filter(c => isLive(c) && !busy[c.id] && !pend[c.id] && offered.indexOf(c.id) < 0);
+            if (!cands.length && offered.length && o.declinedAt && now - o.declinedAt < 30000) return;   // رُفض للتو: مهلة قبل إعادة العرض
             if (!cands.length && offered.length) { HWOrders.update(o.id, { offerTo: null, offerAt: 0, offered: [] }); return; }   // دورة جديدة
             if (!cands.length) { if (o.offerTo) HWOrders.update(o.id, { offerTo: null, offerAt: 0 }); return; }
             const c = rank(cands, o)[0], d = distTo(c, o);
