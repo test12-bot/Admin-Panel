@@ -311,7 +311,7 @@ async function submitLogin(ev) {
     if (!passEl.value) { document.getElementById('loginPassField').classList.add('invalid'); err.textContent = 'الرجاء إدخال كلمة المرور'; return; }
 
     btn.classList.add('loading');
-    await new Promise(r => setTimeout(r, 350));
+    await Promise.all([new Promise(r => setTimeout(r, 350)), HWDB.col('staff').ready()]);
     const user = findUserByName(nameEl.value);
     const ok = user && sha256(`HIGHWAY|${user.id}|${passEl.value}`) === user.hash;
     btn.classList.remove('loading');

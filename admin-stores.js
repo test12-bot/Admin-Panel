@@ -4,13 +4,12 @@
    1) إضافة متجر وحساب دخوله (اسم المستخدم وكلمة المرور) وإيقافه أو حذفه
    2) الشعار وصورة الغلاف وملف PDF لقائمة أسعار التوصيل
    3) موقع المتجر على الخريطة، الفتح والإغلاق والإيقاف المؤقت
-   4) المنيو كاملًا: الأقسام والأصناف والأسعار والخيارات ووقت التحضير
-      (المتجر يتحكم فقط بالتوفر اليومي من تطبيقه)
+   4) المنيو: نفس محرر المطعم (hw-menued.js) — مثل طلبات، المطعم يدير منيوه والإدارة تستطيع التعديل أيضًا
    5) أسعار التوصيل في قوائم الأسعار (السرو / أم النعاج — السلط / عمان)
    يعتمد على: hw-biz.js, hw-prices.js, admin.js
    ========================================================= */
 const menusColA = HWDB.col('menus'), START_LBL = { sarou: 'السرو', umm_naaj: 'أم النعاج' };
-let mStore = '', mCat = null, mItem = null, mOpts = [], plStart = 'sarou', plRegion = 'salt', plDraft = null;
+let mStore = '', plStart = 'sarou', plRegion = 'salt', plDraft = null;
 function storesAll() { return HWBiz.storeList(true); }
 function storeName(id) { const s = HWBiz.storeById(id); return s ? s.name : id; }
 
@@ -166,80 +165,14 @@ function saveLocA() {
 }
 
 /* =========================================================
-   المنيو (شاشة كاملة)
+   المنيو (شاشة كاملة) — نفس المحرر المشترك hw-menued.js الذي يستخدمه المطعم
    ========================================================= */
 function openMenuAdm(sid) { mStore = sid; closeAdm(); goTo('screen-menuadm'); renderMenuAdm(); }
-function mMenu() { return JSON.parse(JSON.stringify(menusColA.get(mStore) || { id: mStore, cats: [] })); }
-function mSave(m, what) { m.demo = false; menusColA.replace(mStore, m); if (what) logAct('store', what + ' — ' + storeName(mStore)); }
 function renderMenuAdm() {
-    const box = A$('menuAdmBody'); if (!box || !mStore) return;
-    const m = menusColA.get(mStore) || { cats: [] }, now = Date.now();
+    if (!mStore) return;
     A$('menuAdmTitle').textContent = 'منيو ' + storeName(mStore);
-    box.innerHTML = '<p class="mut mg-note">المتجر يستطيع فقط إطفاء الأصناف أو تعليم ما نفد اليوم. الأسماء والأسعار والخيارات تعدّلها الإدارة من هنا.</p>' +
-        m.cats.map((c, ci) => '<div class="cart-card"><div class="mrow"><b>' + AE(c.name) + '</b><button type="button" class="more-link inl" onclick="mCatSheet(' + ci + ')">تعديل</button></div>' +
-            c.items.map((it, ii) => {
-                const on = HWBiz.itemOn(it, now), tags = [AM(it.price) + ' د.أ'];
-                if ((it.options || []).length) tags.push(it.options.length + ' خيارات'); if (it.prepMin) tags.push(it.prepMin + ' د تحضير');
-                if (it.outUntil && it.outUntil > now) tags.push('نفد حتى الغد'); else if (it.on === false) tags.push('موقوف');
-                return '<div class="mrow it' + (on ? '' : ' off') + '"><span class="em">' + HWFood.forItem(it.name, it.desc, c.name, '') + '</span><div class="mt"><b>' + AE(it.name) + '</b><small class="mut">' + tags.join(' · ') + '</small></div>' +
-                    '<button type="button" class="sw sm' + (on ? ' on' : '') + '" onclick="mToggle(' + ci + ',' + ii + ')" aria-label="التوفر"></button><button type="button" class="more-link inl" onclick="mItemSheet(' + ci + ',' + ii + ')">تعديل</button></div>';
-            }).join('') + '<button type="button" class="more-link" onclick="mItemSheet(' + ci + ',-1)">+ إضافة صنف</button></div>').join('') +
-        '<button type="button" class="ghost-btn wide" onclick="mCatSheet(-1)">+ إضافة قسم جديد</button>';
+    HWMenuEd.render(A$('menuAdmBody'), mStore, { onLog: (t) => logAct('store', t + ' — ' + storeName(mStore)) });
 }
-function mToggle(ci, ii) { const m = mMenu(), it = m.cats[ci].items[ii], on = HWBiz.itemOn(it); it.on = !on; it.outUntil = 0; mSave(m); buzz(); }
-function mCatSheet(ci) {
-    mCat = ci; const c = ci >= 0 ? mMenu().cats[ci] : { name: '' };
-    admSheet(aHead('المنيو', ci >= 0 ? 'تعديل القسم' : 'قسم جديد') + fld('mcN', 'اسم القسم', c.name, 'placeholder="مثال: مشروبات"') +
-        '<div class="btn-row">' + (ci >= 0 ? '<button type="button" class="ghost-btn dng" onclick="mCatDel()">حذف</button>' : '') + '<button type="button" class="submit-btn" onclick="mCatSave()"><span class="btn-label">حفظ</span></button></div>');
-}
-function mCatSave() {
-    const n = A$('mcN').value.trim(); if (!n) return; const m = mMenu();
-    if (mCat >= 0) m.cats[mCat].name = n; else m.cats.push({ id: 'c' + Date.now().toString(36), name: n, items: [] });
-    mSave(m, (mCat >= 0 ? 'تعديل قسم ' : 'قسم جديد ') + n); closeAdm();
-}
-function mCatDel() { if (!confirm('حذف القسم وكل أصنافه؟')) return; const m = mMenu(), n = m.cats[mCat].name; m.cats.splice(mCat, 1); mSave(m, 'حذف قسم ' + n); closeAdm(); }
-function mItemSheet(ci, ii) {
-    mItem = [ci, ii]; const m = mMenu(), it = ii >= 0 ? m.cats[ci].items[ii] : { name: '', desc: '', price: '' };
-    mOpts = JSON.parse(JSON.stringify(it.options || []));
-    admSheet(aHead(AE(m.cats[ci].name), ii >= 0 ? 'تعديل الصنف' : 'صنف جديد') + fld('miN', 'الاسم', it.name) + fld('miD', 'الوصف <span class="opt">(اختياري)</span>', it.desc || '') +
-        '<div class="two">' + fld('miP', 'السعر (د.أ)', it.price, 'type="number" step="0.05" min="0" inputmode="decimal"') +
-        '<div class="field"><label for="miT">وقت التحضير</label><select id="miT"><option value="0">المعتاد للمتجر</option>' + [10, 15, 20, 25, 30, 40, 45, 60].map(n => '<option value="' + n + '"' + (it.prepMin === n ? ' selected' : '') + '>' + n + ' دقيقة</option>').join('') + '</select></div></div>' +
-        '<div class="opt-ed"><div class="mrow"><div><b>الخيارات والإضافات</b><small class="mut">مثل الحجم، الإضافات، اجعلها وجبة</small></div><button type="button" class="ghost-btn" onclick="mAddGroup()">+ مجموعة</button></div><div id="mOptsEd"></div></div>' +
-        '<div class="btn-row">' + (ii >= 0 ? '<button type="button" class="ghost-btn dng" onclick="mItemDel()">حذف</button>' : '') + '<button type="button" class="submit-btn" onclick="mItemSave()"><span class="btn-label">حفظ</span></button></div>');
-    mRenderOpts();
-}
-function mRenderOpts() {
-    A$('mOptsEd').innerHTML = mOpts.map((g, gi) =>
-        '<div class="og-ed" data-g="' + gi + '"><div class="og-row"><input data-f="name" value="' + AE(g.name) + '" placeholder="اسم المجموعة (مثال: الحجم)"><button type="button" class="og-x" onclick="mDelGroup(' + gi + ')" aria-label="حذف المجموعة">×</button></div>' +
-        '<div class="og-row sm"><label><input type="checkbox" data-f="req"' + (g.min >= 1 ? ' checked' : '') + '> اختيار مطلوب</label><label>الحد الأقصى <input type="number" data-f="max" min="1" max="10" value="' + (g.max || 1) + '"></label></div>' +
-        g.choices.map((c, ci) => '<div class="og-row ch" data-c="' + ci + '"><input data-f="cname" value="' + AE(c.name) + '" placeholder="الخيار"><input data-f="cprice" type="number" step="0.05" min="0" value="' + (c.price || 0) + '" aria-label="السعر الإضافي"><button type="button" class="og-x" onclick="mDelChoice(' + gi + ',' + ci + ')" aria-label="حذف الخيار">×</button></div>').join('') +
-        '<button type="button" class="more-link" onclick="mAddChoice(' + gi + ')">+ خيار</button></div>').join('') || '<p class="mut" style="margin:6px 0 0">لا توجد خيارات لهذا الصنف</p>';
-}
-function mReadOpts() {
-    document.querySelectorAll('#mOptsEd .og-ed').forEach(el => {
-        const g = mOpts[+el.dataset.g]; if (!g) return;
-        g.name = el.querySelector('[data-f="name"]').value.trim(); g.min = el.querySelector('[data-f="req"]').checked ? 1 : 0;
-        g.max = Math.max(1, Math.min(10, parseInt(el.querySelector('[data-f="max"]').value, 10) || 1));
-        el.querySelectorAll('.ch').forEach(r => { const c = g.choices[+r.dataset.c]; c.name = r.querySelector('[data-f="cname"]').value.trim(); c.price = Math.max(0, Math.round((parseFloat(r.querySelector('[data-f="cprice"]').value) || 0) * 100) / 100); });
-    });
-}
-function mAddGroup() { mReadOpts(); mOpts.push({ id: 'g' + Date.now().toString(36), name: '', min: 0, max: 1, choices: [{ id: 'o' + Date.now().toString(36), name: '', price: 0 }] }); mRenderOpts(); }
-function mDelGroup(gi) { mReadOpts(); mOpts.splice(gi, 1); mRenderOpts(); }
-function mAddChoice(gi) { mReadOpts(); mOpts[gi].choices.push({ id: 'o' + Date.now().toString(36) + mOpts[gi].choices.length, name: '', price: 0 }); mRenderOpts(); }
-function mDelChoice(gi, ci) { mReadOpts(); mOpts[gi].choices.splice(ci, 1); mRenderOpts(); }
-function mItemSave() {
-    const n = A$('miN').value.trim(), p = parseFloat(A$('miP').value);
-    if (!n || !(p >= 0)) { HWOrders.toast('أدخل الاسم والسعر'); return; }
-    mReadOpts();
-    const opts = mOpts.map(g => Object.assign(g, { choices: g.choices.filter(c => c.name) })).filter(g => g.name && g.choices.length);
-    if (opts.some(g => g.min > g.choices.length)) { HWOrders.toast('عدد الخيارات أقل من المطلوب'); return; }
-    const m = mMenu(), [ci, ii] = mItem, old = ii >= 0 ? m.cats[ci].items[ii] : {};
-    const rec = { id: old.id || 'i' + Date.now().toString(36), name: n, desc: A$('miD').value.trim(), price: Math.round(p * 100) / 100, on: old.on !== false, outUntil: old.outUntil || 0, prepMin: +A$('miT').value || 0 };
-    if (opts.length) rec.options = opts;
-    if (ii >= 0) m.cats[ci].items[ii] = rec; else m.cats[ci].items.push(rec);
-    mSave(m, (ii >= 0 ? (old.price !== rec.price ? 'تغيير سعر ' + n + ' إلى ' + AM(rec.price) : 'تعديل صنف ' + n) : 'صنف جديد ' + n)); closeAdm(); HWOrders.toast('تم حفظ الصنف');
-}
-function mItemDel() { if (!confirm('حذف هذا الصنف؟')) return; const m = mMenu(), n = m.cats[mItem[0]].items[mItem[1]].name; m.cats[mItem[0]].items.splice(mItem[1], 1); mSave(m, 'حذف صنف ' + n); closeAdm(); }
 
 /* =========================================================
    أسعار التوصيل (قوائم الأسعار)
@@ -274,6 +207,6 @@ function plReset() {
 /* ---------- ربط ---------- */
 Object.assign(TAB_OF, { 'screen-menuadm': 'manage' });
 (function () { const _g = window.goTo; window.goTo = function (id) { _g(id); if (id === 'screen-menuadm') renderMenuAdm(); }; })();
-menusColA.subscribe(() => { if (scr() === 'screen-menuadm') renderMenuAdm(); else if (scr() === 'screen-manage' && mgTab === 'stores') renderManage(); });
+menusColA.subscribe(() => { if (scr() === 'screen-manage' && mgTab === 'stores') renderManage(); });
 HWBiz.storesCol.subscribe(() => { if (scr() === 'screen-manage' && mgTab !== 'prices') renderManage(); });
 HWBiz.onMedia(() => { if (scr() === 'screen-manage') renderManage(); });
