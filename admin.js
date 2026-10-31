@@ -62,8 +62,10 @@ function renderOpsMap() {
     const el = A$('opsMapEl'); if (!el || !window.L || scr() !== 'screen-dashboard') return;
     if (!opsMap) { opsMap = HWMap.create(el, { center: HWMap.center(), zoom: 12 }); opsLayer = L.layerGroup().addTo(opsMap); }
     const caps = capsCol.list().filter(c => c.lat != null && isLive(c)), act = allOrders.filter(HWOrders.isActive);
-    const sig = caps.map(c => c.id + c.lat + c.lng).join() + '|' + act.map(o => o.id + o.status).join();
+    const stores = storePins();
+    const sig = caps.map(c => c.id + c.lat + c.lng).join() + '|' + act.map(o => o.id + o.status).join() + '|' + stores.map(x => x.id + x.p).join();
     if (sig === opsSig) return; opsSig = sig; opsLayer.clearLayers(); const pts = [];
+    stores.forEach(x => { pts.push(x.p); L.marker(x.p, { icon: HWMap.ICON.store(x.id), zIndexOffset: 100 }).bindTooltip(x.name, { direction: 'top' }).addTo(opsLayer); });
     caps.forEach(c => { const p = [c.lat, c.lng]; pts.push(p); L.marker(p, { icon: HWMap.ICON.cap(), zIndexOffset: 400 }).bindTooltip(c.name, { direction: 'top' }).addTo(opsLayer); });
     act.forEach(o => {
         const color = o.status === 'new' ? '#E8EF44' : o.status === 'accepted' ? '#25CED1' : '#0E3A3B';
@@ -73,6 +75,9 @@ function renderOpsMap() {
     A$('opsLbl').textContent = act.length + ' طلب نشط · ' + caps.length + ' كابتن متصل';
     opsMap.invalidateSize(); if (pts.length) HWMap.fit(opsMap, pts, [36, 36]);
 }
+/* مواقع المتاجر التي حددتها الإدارة: تظهر على خرائط المنسقين فقط */
+function storePins() { return HWBiz.storeList().map(s => { const st = stCol.get(s.id) || {}; return st.lat != null ? { id: s.id, name: s.name, p: [st.lat, st.lng] } : null; }).filter(Boolean); }
+stCol.subscribe(() => { opsSig = ''; try { renderOpsMap(); } catch (e) {} });
 function renderHome() { renderKpis(); renderOpsMap(); }
 
 /* =========================================================

@@ -120,6 +120,7 @@ function renderCapMap() {
     const box = document.getElementById('capMapEl'); if (!box || !window.L) return;
     if (!capMap) { capMap = HWMap.create(box, { center: HWMap.center(), zoom: 12 }); capLayer = L.layerGroup().addTo(capMap); }
     capLayer.clearLayers(); const pts = [];
+    if (typeof storePins === 'function') storePins().forEach(x => { pts.push(x.p); L.marker(x.p, { icon: HWMap.ICON.store(x.id), zIndexOffset: 100 }).bindTooltip(x.name, { direction: 'top' }).addTo(capLayer); });
     capsCol.list().filter(c => c.lat != null && isLive(c)).forEach(c => { const p = [c.lat, c.lng]; pts.push(p); L.marker(p, { icon: HWMap.ICON.cap(), zIndexOffset: 400 }).bindTooltip(c.name, { direction: 'top' }).addTo(capLayer); });
     allOrders.filter(HWOrders.isActive).forEach(o => { if (o.address && o.address.lat != null) { const p = [o.address.lat, o.address.lng]; pts.push(p); L.marker(p, { icon: HWMap.ICON.home() }).bindTooltip(o.code, { direction: 'top' }).addTo(capLayer); } if (o.storeLoc) { pts.push([o.storeLoc.lat, o.storeLoc.lng]); } });
     capMap.invalidateSize(); if (pts.length) HWMap.fit(capMap, pts, [40, 40]);

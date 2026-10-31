@@ -24,13 +24,26 @@ const LEGACY = {
     gulf: ['gulfrestaurant', 'a72741290d3a7e4e653853b2af3d67f2256e19236e85d9d42b6debd829b31306', 'highway-price-list-gulf-restaurant.pdf'],
     julnar: ['julnarpastries', 'cd351c245ecdb1836f396287440277d8452e03e05a14a334f9d9301b46a4410a', 'highway-price-list-julnar-pastries.pdf']
 };
+/* أرقام المتاجر وعناوينها من ملفات PDF لقوائم الأسعار */
+const STORE_INFO = {
+    abuahmad: ['0770018184', 'السرو، طريق السلط'], abusaleh: ['0791010553', 'السرو، طريق السلط'], reef: ['062222242', 'السرو، طريق السلط'],
+    bullgurz: ['0771234555', 'السرو، طريق السلط'], gulf: ['0790649398', 'السرو، طريق السلط'], hamada: ['0795640578', 'السرو، طريق السلط'],
+    julnar: ['0776550115', 'السرو، طريق السلط'], nafeeseh: ['0790069301', 'أم النعاج، طريق السلط']
+};
+/* المتاجر المنقولة سابقًا بدون رقم: يُضاف رقمها وعنوانها مرة واحدة */
+function fillInfo() {
+    if (!currentUser || !HWBiz.storesCol.loaded()) return;
+    HWBiz.storesCol.list().forEach(s => { const i = STORE_INFO[s.id]; if (i && s.phone === undefined) HWBiz.storesCol.patch(s.id, { phone: i[0], addr: s.addr || i[1] }); });
+}
+setInterval(fillInfo, 5000);
 let seeded = false;
 function seedStores() {
     if (seeded || !currentUser || !HWBiz.storesCol.loaded() || HWBiz.storesCol.list().length) return;
     seeded = true;
     (HW_CONFIG.stores || []).forEach((s, i) => {
         const l = LEGACY[s.id] || [s.id, '', ''];
-        HWBiz.storesCol.create({ id: s.id, name: s.name, cat: s.cat, start: s.start || 'sarou', sort: i, user: l[0], alias: l[3] || [], hash: l[1], pdf: l[2], avatar: true, active: true });
+        const inf = STORE_INFO[s.id] || ['', ''];
+        HWBiz.storesCol.create({ id: s.id, name: s.name, cat: s.cat, start: s.start || 'sarou', sort: i, user: l[0], alias: l[3] || [], hash: l[1], pdf: l[2], avatar: true, active: true, phone: inf[0], addr: inf[1] });
     });
     logAct('store', 'نقل المتاجر الحالية إلى لوحة الإدارة');
 }
@@ -58,7 +71,10 @@ function openStoreAdm(sid) {
         '<div class="st-media"><div class="cov-prev">' + (cover ? '<img src="' + AE(cover) + '" alt="">' : '<span>بدون صورة غلاف: يظهر رسم القسم للعملاء</span>') + '</div><img class="st-logo" src="' + AE(HWBiz.logo(sid)) + '" alt=""></div>' +
         '<div class="btn-row"><label class="ghost-btn file-btn">الشعار<input type="file" accept="image/*" onchange="uploadImg(this.files[0],\'logo\')"></label><label class="ghost-btn file-btn">صورة الغلاف<input type="file" accept="image/*" onchange="uploadImg(this.files[0],\'cover\')"></label>' + (cover ? '<button type="button" class="ghost-btn" onclick="setImg(\'cover\',\'\')">إزالة الغلاف</button>' : '') + '</div>' +
         '<div class="sh-rows"><div><span>الحالة الآن</span><b>' + (s.active === false ? 'الحساب موقوف' : ss.open ? 'مفتوح' : AE(ss.label || 'مغلق')) + '</b></div><div><span>القسم</span><b>' + AE(s.cat || '—') + '</b></div><div><span>نقطة الانطلاق</span><b>' + (START_LBL[s.start] || '—') + '</b></div>' +
-        '<div><span>اسم المستخدم</span><b dir="ltr">' + AE(s.user || '—') + '</b></div><div><span>الموقع</span><b>' + (st.lat != null ? 'محدد ✓' : 'غير محدد') + '</b></div><div><span>قائمة الأسعار PDF</span><b>' + (HWBiz.hasPdf(sid) ? 'مرفوعة ✓' : 'لا يوجد') + '</b></div></div>' +
+        '<div><span>اسم المستخدم</span><b dir="ltr">' + AE(s.user || '—') + '</b></div>' +
+        '<div><span>رقم المتجر</span><b dir="ltr">' + (s.phone ? '<a href="tel:' + AE(s.phone) + '">' + AE(s.phone) + '</a>' : '—') + '</b></div>' +
+        '<div><span>العنوان</span><b>' + AE(s.addr || '—') + '</b></div>' +
+        '<div><span>الموقع</span><b>' + (st.lat != null ? '<a href="' + mapsLink(st) + '" target="_blank" rel="noopener">محدد ✓ · فتح الخريطة</a>' : 'غير محدد') + '</b></div><div><span>قائمة الأسعار PDF</span><b>' + (HWBiz.hasPdf(sid) ? 'مرفوعة ✓' : 'لا يوجد') + '</b></div></div>' +
         '<div class="adm-grid">' +
         '<button type="button" class="ghost-btn" onclick="openMenuAdm(\'' + sid + '\')">المنيو والأسعار</button>' +
         '<button type="button" class="ghost-btn" onclick="openStoreForm(\'' + sid + '\')">البيانات وكلمة المرور</button>' +
@@ -70,6 +86,7 @@ function openStoreAdm(sid) {
         '<button type="button" class="ghost-btn' + (s.active === false ? '' : ' dng') + '" onclick="storeAcct(\'' + sid + '\',' + (s.active === false) + ')">' + (s.active === false ? 'تفعيل الحساب' : 'إيقاف الحساب') + '</button>' +
         '<button type="button" class="ghost-btn dng" onclick="deleteStore(\'' + sid + '\')">حذف المتجر</button></div>');
 }
+function mapsLink(st) { return 'https://www.google.com/maps/search/?api=1&query=' + st.lat + ',' + st.lng; }
 function storeOpen(sid, v) { stCol.patch(sid, { open: v, pausedUntil: 0 }, true); logAct('store', (v ? 'فتح ' : 'إغلاق ') + storeName(sid)); openStoreAdm(sid); }
 function storePause(sid, m) { stCol.patch(sid, { pausedUntil: m ? Date.now() + m * 60000 : 0 }, true); logAct('store', m ? 'إيقاف ' + storeName(sid) + ' مؤقتًا ' + m + ' د' : 'إلغاء إيقاف ' + storeName(sid)); openStoreAdm(sid); }
 function storeAcct(sid, v) {
@@ -92,6 +109,7 @@ function openStoreForm(sid) {
     admSheet(aHead('المتاجر', sid ? 'بيانات المتجر' : 'متجر جديد') + fld('sfN', 'اسم المتجر', s.name) +
         '<div class="two">' + fld('sfC', 'القسم', s.cat, 'list="sfCats" placeholder="مثال: مطاعم"') + '<datalist id="sfCats">' + cats.map(c => '<option value="' + AE(c) + '">').join('') + '</datalist>' +
         '<div class="field"><label for="sfS">نقطة الانطلاق (قائمة الأسعار)</label><select id="sfS">' + Object.keys(START_LBL).map(k => '<option value="' + k + '"' + (s.start === k ? ' selected' : '') + '>' + START_LBL[k] + '</option>').join('') + '</select></div></div>' +
+        '<div class="two">' + fld('sfPh', 'رقم المتجر', s.phone || '', 'type="tel" dir="ltr" inputmode="tel" placeholder="07XXXXXXXX"') + fld('sfA', 'العنوان', s.addr || '', 'placeholder="مثال: السرو، طريق السلط"') + '</div>' +
         '<h4 class="adm-sub">حساب الدخول لتطبيق المتجر</h4>' + fld('sfU', 'اسم المستخدم (إنجليزي)', s.user, 'dir="ltr" autocapitalize="off" autocomplete="off"') +
         fld('sfP', 'كلمة المرور' + (sid ? ' <span class="opt">(اتركها فارغة لعدم التغيير)</span>' : ''), '', 'type="text" dir="ltr" autocomplete="off"') +
         '<div class="btn-row"><button type="button" class="submit-btn" onclick="saveStoreForm()"><span class="btn-label">' + (sid ? 'حفظ' : 'إضافة المتجر') + '</span></button></div>');
@@ -104,7 +122,9 @@ function saveStoreForm() {
     if (!admEdit && pass.length < 6) { HWOrders.toast('كلمة المرور 6 أحرف على الأقل'); return; }
     if (pass && pass.length < 6) { HWOrders.toast('كلمة المرور 6 أحرف على الأقل'); return; }
     const id = admEdit || (user.replace(/[^a-z0-9]/g, '').slice(0, 20) || 's') + (HWBiz.storeById(user) ? Date.now().toString(36).slice(-3) : '');
-    const rec = { name, cat, start, user };
+    const phone = A$('sfPh').value.replace(/[^\d+]/g, ''), addr = A$('sfA').value.trim();
+    if (phone && !/^(\+?962|0)\d{8,9}$/.test(phone)) { HWOrders.toast('رقم المتجر غير صحيح'); return; }
+    const rec = { name, cat, start, user, phone, addr };
     if (pass) rec.hash = sha256('HIGHWAY|' + id + '|' + pass);
     if (admEdit) { ensureDoc(id); HWBiz.storesCol.patch(id, rec); }
     else HWBiz.storesCol.create(Object.assign({ id, active: true, sort: storesAll().length }, rec));
@@ -149,6 +169,7 @@ function openStoreLocA(sid) {
         m = document.createElement('div'); m.id = 'amLoc'; m.className = 'am-loc';
         m.innerHTML = '<div class="lmap" id="amLocMap"></div><div class="am-pin"><svg viewBox="0 0 48 58"><path d="M24 56C24 56 4 36 4 22a20 20 0 0 1 40 0c0 14-20 34-20 34Z" fill="#0E3A3B"/><circle cx="24" cy="22" r="9" fill="#E8EF44"/></svg></div>' +
             '<div class="am-loc-top"><button type="button" class="ghost-btn" onclick="closeLocA()">إلغاء</button><b id="amLocName"></b></div>' +
+            '<div class="am-loc-paste"><input id="amLocIn" dir="ltr" placeholder="الصق الإحداثيات أو رابط Google Maps" autocomplete="off"><button type="button" class="ghost-btn" onclick="pasteLocA()">انتقال</button></div>' +
             '<div class="am-loc-bar"><small id="amLocAddr">حرّك الخريطة لوضع الدبوس على باب المتجر</small><button type="button" class="submit-btn" onclick="saveLocA()"><span class="btn-label">حفظ الموقع</span></button></div>';
         document.body.appendChild(m);
     }
@@ -156,6 +177,19 @@ function openStoreLocA(sid) {
     const st = stCol.get(sid) || {}, c = st.lat != null ? [st.lat, st.lng] : HWMap.center();
     if (!locMapA) { locMapA = HWMap.create(A$('amLocMap'), { center: c, zoom: 17 }); locMapA.on('moveend', () => { const p = locMapA.getCenter(); locPickA = [p.lat, p.lng]; }); }
     setTimeout(() => { locMapA.invalidateSize(); locMapA.setView(c, 17, { animate: false }); locPickA = c; }, 80);
+}
+/* يقبل: "32.04, 35.73" أو رابط Google Maps كامل (@lat,lng أو q=lat,lng أو !3dlat!4dlng) */
+function parseLoc(t) {
+    t = decodeURIComponent(String(t || '')).replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+    const ok = (a, b) => { a = +a; b = +b; return isFinite(a) && isFinite(b) && Math.abs(a) <= 90 && Math.abs(b) <= 180 && (a || b) ? [a, b] : null; };
+    let m = t.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/) || t.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/) || t.match(/[?&](?:q|query|ll|destination|center)=(-?\d+\.\d+)[, +]+(-?\d+\.\d+)/) || t.match(/^\s*\(?(-?\d{1,2}\.\d+)\s*[,،\s]\s*(-?\d{1,3}\.\d+)\)?\s*$/);
+    return m ? ok(m[1], m[2]) : null;
+}
+function pasteLocA() {
+    const t = A$('amLocIn').value.trim(); if (!t) return;
+    const c = parseLoc(t);
+    if (!c) { HWOrders.toast(/goo\.gl|maps\.app/.test(t) ? 'الرابط المختصر لا يحتوي الإحداثيات: في Google Maps اضغط مطولًا على مكان المتجر وانسخ الأرقام التي تظهر' : 'لم أتعرف على الموقع، الصق الإحداثيات مثل: 32.0453, 35.7271'); return; }
+    locMapA.setView(c, 18, { animate: false }); locPickA = c; HWOrders.toast('تم وضع الدبوس، تأكد منه ثم اضغط حفظ الموقع');
 }
 function closeLocA() { A$('amLoc').classList.remove('show'); openStoreAdm(admEdit); }
 function saveLocA() {
