@@ -1,0 +1,462 @@
+/* =========================================================
+   Admin Panel — admin.js
+   1) سجل النشاط (من فعل ماذا ومتى)
+   2) الرئيسية: مؤشرات الأداء اليومية + خريطة العمليات الحية
+   3) تسوية الكباتن النقدية + كشف مطبوع
+   4) البلاغات الواردة من الكباتن
+   5) الإدارة: المتاجر (الحالة، الحساب، صورة الغلاف)، العروض، أكواد الخصم،
+      أهداف الكباتن، الإعلانات، فريق العمليات
+   يعتمد على: hw-orders.js, hw-biz.js, hw-map.js, script.js, disp-v2.js
+   ========================================================= */
+const logCol = HWDB.col('log'), issuesCol = HWDB.col('issues'), stCol = HWDB.col('storestate'), staffCol = HWDB.col('staff');
+const AE = HWOrders.esc, AM = HWOrders.money, A$ = (id) => document.getElementById(id);
+let mgTab = 'stores', issFilter = 'open', admEdit = null;
+function scr() { const a = document.querySelector('.screen.active'); return a ? a.id : ''; }
+function admSheet(html) { A$('admSheetBody').innerHTML = html; A$('admSheet').classList.add('show'); }
+function closeAdm() { A$('admSheet').classList.remove('show'); }
+function aHead(small, title) { return '<div class="sh-head"><div><small>' + small + '</small><h3>' + title + '</h3></div></div>'; }
+function fld(id, label, val, attrs) { return '<div class="field"><label for="' + id + '">' + label + '</label><input id="' + id + '" value="' + AE(val == null ? '' : val) + '" ' + (attrs || '') + '></div>'; }
+function dateVal(ts) { return ts ? new Date(ts).toISOString().slice(0, 10) : ''; }
+function dateEnd(v) { return v ? new Date(v + 'T23:59:59').getTime() : 0; }
+function num(id) { return Math.max(0, parseFloat(A$(id).value) || 0); }
+
+/* =========================================================
+   1) سجل النشاط
+   ========================================================= */
+function actorName() { return (currentUser && (currentUser.label || currentUser.names[0])) || 'النظام'; }
+function logAct(action, text) { try { logCol.create({ at: Date.now(), by: actorName(), action, text }); } catch (e) {} }
+const LOG_IC = { assign: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>', reassign: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/></svg>', cancel: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>', status: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>', settle: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>', store: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9l1.5-5h15L21 9M4 9v11h16V9M3 9h18"/></svg>', offer: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 5 5 19"/><circle cx="7" cy="7" r="2"/><circle cx="17" cy="17" r="2"/></svg>', promo: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>', target: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>', ann: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11v2a1 1 0 0 0 1 1h3l5 4V6L7 10H4a1 1 0 0 0-1 1Z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg>', team: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2 21a7 7 0 0 1 14 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M22 21a7 7 0 0 0-4-6.3"/></svg>', issue: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v4M12 17h.01"/></svg>', auto: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></svg>', cap: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="17" r="3"/><circle cx="18" cy="17" r="3"/><path d="M9 17h6l-2-6h-3M15 11l2-4h3"/></svg>' };
+function renderLog() {
+    const box = A$('logBody'); if (!box) return;
+    const l = logCol.list().slice().sort((a, b) => b.at - a.at).slice(0, 200);
+    box.innerHTML = l.length ? l.map(x => '<div class="lg-row"><span class="lg-ic">' + (LOG_IC[x.action] || '•') + '</span><div><b>' + AE(x.text) + '</b><small>' + AE(x.by) + ' · ' + new Date(x.at).toLocaleDateString('ar-JO') + ' ' + HWOrders.fmtTime(x.at) + '</small></div></div>').join('')
+        : '<div class="empty-orders">لا يوجد نشاط مسجّل بعد</div>';
+}
+
+/* =========================================================
+   2) الرئيسية: مؤشرات الأداء + خريطة العمليات
+   ========================================================= */
+function kpis(from, to) {
+    const l = allOrders.filter(o => o.createdAt >= from && (!to || o.createdAt <= to)), done = l.filter(o => o.status === 'delivered'), canc = l.filter(o => o.status === 'cancelled');
+    const t = done.reduce((a, o) => { const s = HWOrders.settle(o); a.fee += s.fee; a.com += s.commission; a.promo += s.promo; a.gmv += s.items; return a; }, { fee: 0, com: 0, promo: 0, gmv: 0 });
+    const mins = done.map(o => { const d = (o.history || []).filter(h => h.s === 'delivered')[0]; return d ? (d.t - (o.scheduledFor ? HWOrders.dispatchAt(o) : o.createdAt)) / 60000 : null; }).filter(x => x != null && x > 0);
+    const rated = done.filter(o => o.rating && o.rating.store);
+    return { n: l.length, done: done.length, canc: canc.length, rate: l.length ? Math.round(canc.length / l.length * 100) : 0, avgMin: mins.length ? Math.round(mins.reduce((a, b) => a + b, 0) / mins.length) : 0,
+        gmv: t.gmv, fee: t.fee, com: t.com, promo: t.promo, net: HWBiz.r2(t.com - t.promo), rating: rated.length ? (rated.reduce((a, o) => a + o.rating.store, 0) / rated.length).toFixed(1) : '—' };
+}
+/* تفاصيل مؤشرات الأداء وإحصائيات الكباتن (hw-stats.js) */
+function statDetail(key) {
+    const from = HWBiz.periodStart('day'), l = allOrders.filter(o => o.createdAt >= from), done = l.filter(o => o.status === 'delivered');
+    const m = v => AM(v), k = kpis(from), it = (o, v) => HWStats.orderItem(o, v);
+    const dmin = o => { const d = (o.history || []).filter(h => h.s === 'delivered')[0]; return d ? Math.round((d.t - (o.scheduledFor ? HWOrders.dispatchAt(o) : o.createdAt)) / 60000) : null; };
+    const by = (arr, f) => { const r = {}; arr.forEach(o => { const key2 = f(o) || '—'; r[key2] = (r[key2] || 0) + 1; }); return Object.keys(r).sort((a, b) => r[b] - r[a]); };
+    switch (key) {
+        case 'k-n': return { title: 'طلبات اليوم', value: k.n, sub: k.done + ' مسلّمة', rows: [['مسلّمة', k.done], ['نشطة', l.filter(HWOrders.isActive).length], ['ملغاة', k.canc], ['أكثر متجر', by(l, o => o.storeName)[0] || '—']], list: l.slice().sort((a, b) => b.createdAt - a.createdAt).map(o => it(o, HWOrders.fmtTime(o.createdAt))) };
+        case 'k-min': { const xs = done.map(o => [o, dmin(o)]).filter(x => x[1] != null).sort((a, b) => b[1] - a[1]);
+            return { title: 'متوسط وقت التوصيل', value: k.avgMin || '—', unit: 'دقيقة', rows: [['الأسرع', xs.length ? xs[xs.length - 1][1] + ' د' : '—'], ['الأبطأ', xs.length ? xs[0][1] + ' د' : '—']], listTitle: 'من الأبطأ للأسرع', list: xs.map(x => it(x[0], x[1] + ' د')) }; }
+        case 'k-gmv': { const r = {}; done.forEach(o => { const s = HWOrders.settle(o); r[o.storeName || '—'] = (r[o.storeName || '—'] || 0) + s.items; });
+            return { title: 'قيمة الطلبات (GMV)', value: m(k.gmv), unit: 'د.أ', rows: [['رسوم التوصيل', m(k.fee)], ['متوسط الطلب', done.length ? m(k.gmv / done.length) : '—']], listTitle: 'حسب المتجر', list: Object.keys(r).sort((a, b) => r[b] - r[a]).map(n => ({ t: n, v: m(r[n]) + ' د.أ' })) }; }
+        case 'k-net': return { title: 'صافي المنصة', value: m(k.net), unit: 'د.أ', rows: [['العمولة', m(k.com)], ['أكواد الخصم', '− ' + m(k.promo)]], listTitle: 'العمولة لكل طلب', list: done.map(o => it(o, m(HWOrders.settle(o).commission))) };
+        case 'k-canc': { const c = l.filter(o => o.status === 'cancelled');
+            return { title: 'نسبة الإلغاء', value: k.rate + '٪', sub: k.canc + ' من ' + k.n, listTitle: 'الطلبات الملغاة', list: c.map(o => Object.assign(it(o, ''), { s: (o.cancelReason || o.cancelBy || 'بدون سبب') + ' · ' + HWOrders.ago(o.updatedAt || o.createdAt) })), empty: 'لا توجد طلبات ملغاة اليوم' }; }
+        case 'k-rate': { const r = done.filter(o => o.rating && o.rating.store);
+            return { title: 'رضا العملاء', value: k.rating, unit: 'من 5', rows: [5, 4, 3, 2, 1].map(n => [n + ' ★', r.filter(o => Math.round(o.rating.store) === n).length]).slice(0, 4), listTitle: 'التقييمات', list: r.map(o => Object.assign(it(o, '★ ' + o.rating.store), { s: o.rating.comment || (o.customer && o.customer.name) || '' })), empty: 'لا توجد تقييمات اليوم' }; }
+        case 'c-online': { const c = capsCol.list().filter(x => x.online && x.active !== false);
+            return { title: 'متصلون الآن', value: c.length, listTitle: 'الكباتن المتصلون', list: c.map(x => { const a = allOrders.filter(o => o.captain && o.captain.id === x.id && (o.status === 'accepted' || o.status === 'picked'))[0]; return { t: x.name, s: x.phone, tag: a ? 'في مهمة ' + a.code : 'متاح', tc: a ? 't' : 'd' }; }), empty: 'لا يوجد كباتن متصلون الآن' }; }
+        case 'c-all': return { title: 'إجمالي الكباتن', value: capsCol.list().length, rows: [['متصلون', capsCol.list().filter(x => x.online && x.active !== false).length], ['موقوفون', capsCol.list().filter(x => x.active === false).length]], listTitle: 'كل الكباتن', list: capsCol.list().map(x => ({ t: x.name, s: x.phone, tag: x.active === false ? 'موقوف' : x.online ? 'متصل' : 'غير متصل', tc: x.active === false ? 'r' : x.online ? 't' : '' })) };
+        case 'c-done': case 'c-com': {
+            const dd = allOrders.filter(o => o.status === 'delivered' && o.captain && inCapRange(o.updatedAt || o.createdAt)), r = {};
+            dd.forEach(o => { const s = HWOrders.settle(o), id = o.captain.id; r[id] = r[id] || { n: 0, com: 0, name: o.captain.name }; r[id].n++; r[id].com += s.commission; });
+            const ids = Object.keys(r).sort((a, b) => key === 'c-done' ? r[b].n - r[a].n : r[b].com - r[a].com);
+            return { title: key === 'c-done' ? 'طلبات مسلّمة' : 'عمولة المنصة', value: key === 'c-done' ? dd.length : m(ids.reduce((a, i) => a + r[i].com, 0)), unit: key === 'c-done' ? '' : 'د.أ', sub: { today: 'اليوم', week: 'آخر ٧ أيام', all: 'كل الفترات' }[capRange], listTitle: 'حسب الكابتن', list: ids.map(i => ({ t: r[i].name, s: r[i].n + ' طلب', v: key === 'c-done' ? r[i].n : m(r[i].com) })) }; }
+    }
+}
+/* يحتاج تدخلك: الاستثناءات أولًا (مثل لوحات Onfleet وUber) — كل بند يفتح مكانه */
+function needsAttention() {
+    const now = Date.now(), act = allOrders.filter(HWOrders.isActive), t = (o, s) => { const h = (o.history || []).filter(x => x.s === s)[0]; return h ? h.t : 0; };
+    const due = o => o.scheduledFor ? HWOrders.dispatchAt(o) : o.createdAt;
+    const pend = act.filter(o => HWOrders.isMarket(o) && o.storeState === 'pending' && now - o.createdAt > 3 * 60000);
+    const noCap = act.filter(o => o.status === 'new' && !o.captain && (!HWOrders.isMarket(o) || o.storeState !== 'pending') && now - due(o) > 5 * 60000 && due(o) <= now);
+    const late = act.filter(o => o.status !== 'new' && now - due(o) > ((o.prepMin || 20) + (o.routeMin || 15) + 15) * 60000);
+    const iss = issuesCol.list().filter(i => i.status !== 'resolved').length;
+    const lim = capsCol.list().filter(c => c.overLimit && c.active !== false);
+    const ns = allOrders.filter(o => o.noShow && HWOrders.isToday(o.updatedAt || o.createdAt)).length;
+    const noLoc = stCol.loaded() ? HWBiz.storeList().filter(x => (stCol.get(x.id) || {}).lat == null) : [];
+    return [
+        pend.length && ['r', pend.length + ' بانتظار قبول المتجر', 'أكثر من 3 دقائق', "goTo('screen-board')"],
+        noCap.length && ['r', noCap.length + ' بلا كابتن', 'أكثر من 5 دقائق', "goTo('screen-board')"],
+        late.length && ['y', late.length + ' متأخر', 'تجاوز الوقت المتوقع', "goTo('screen-board')"],
+        iss && ['y', iss + ' بلاغ مفتوح', 'بحاجة لمراجعة', "goTo('screen-issues')"],
+        lim.length && ['y', lim.length + ' كابتن تجاوز حد النقد', lim.map(c => c.name).slice(0, 2).join('، '), "tabGo('screen-captains')"],
+        noLoc.length && ['y', noLoc.length + ' متجر بلا موقع', 'الكباتن لن يروا مكانه: ' + noLoc.map(x => x.name).slice(0, 2).join('، '), "mgTab='stores';tabGo('screen-manage')"],
+        ns && ['', ns + ' لم يستلم اليوم', 'سجل العملاء', "mgTab='customers';tabGo('screen-manage')"]
+    ].filter(Boolean);
+}
+function needHtml() {
+    const l = needsAttention();
+    if (!l.length) return '<div class="need ok"><span class="need-ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><b>كل شيء يسير كما يجب</b></div>';
+    return '<div class="need"><b class="need-h">يحتاج تدخلك</b><div class="need-row">' + l.map(x => '<button type="button" class="need-c ' + x[0] + '" onclick="' + x[3] + '"><b>' + x[1] + '</b><small>' + AE(x[2]) + '</small></button>').join('') + '</div></div>';
+}
+/* الفرق عن أمس في نفس الوقت من اليوم */
+function delta(now, then, money) {
+    const d = money ? HWBiz.r2(now - then) : now - then; if (!then && !now) return '';
+    return '<i class="dl' + (d < 0 ? ' dn' : d > 0 ? ' up' : '') + '">' + (d > 0 ? '+' : d < 0 ? '−' : '') + (money ? AM(Math.abs(d)) : Math.abs(d)) + ' عن أمس</i>';
+}
+function kpisYesterday() { return kpis(HWBiz.periodStart('day') - 864e5, Date.now() - 864e5); }
+/* جودة خدمة المتاجر: نسبة القبول، متوسط وقت القبول، الطلبات الضائعة */
+function storeQuality() {
+    const from = HWBiz.periodStart('week'), r = {};
+    allOrders.filter(o => HWOrders.isMarket(o) && o.createdAt >= from && o.storeState !== 'pending').forEach(o => {   /* الطلب الذي ما زال بانتظار المتجر لا يُحسب بعد */
+        const k = o.storeId || o.storeName, x = r[k] = r[k] || { name: o.storeName || '—', n: 0, acc: 0, lost: 0, mins: [] };
+        x.n++; const a = (o.history || []).filter(h => h.s === 'store_accepted')[0];
+        if (a) { x.acc++; x.mins.push((a.t - o.createdAt) / 60000); }
+        if (o.storeState === 'rejected' || o.storeState === 'timeout') x.lost++;
+    });
+    const l = Object.keys(r).map(k => r[k]).filter(x => x.n >= 1).sort((a, b) => (a.acc / a.n) - (b.acc / b.n) || b.lost - a.lost).slice(0, 6);
+    if (!l.length) return '';
+    return '<div class="sq"><b class="perf-h">جودة خدمة المتاجر <small class="mut">آخر ٧ أيام</small></b>' + l.map(x => {
+        const p = Math.round(x.acc / x.n * 100), m = x.mins.length ? Math.round(x.mins.reduce((a, b) => a + b, 0) / x.mins.length * 10) / 10 : null;
+        return '<div class="sq-r"><span class="sq-n">' + AE(x.name) + '</span><span class="sq-b"><i style="width:' + p + '%" class="' + (p < 85 ? 'lo' : '') + '"></i></span><b class="' + (p < 85 ? 'lo' : '') + '">' + p + '٪</b>' +
+            '<small>' + (m != null ? m + ' د للقبول' : '—') + (x.lost ? ' · ضاع ' + x.lost : '') + '</small></div>';
+    }).join('') + '</div>';
+}
+function renderKpis() {
+    const box = A$('kpiBox'); if (!box) return;
+    const k = kpis(HWBiz.periodStart('day')), y = kpisYesterday(), live = capsCol.list().filter(isLive).length, open = issuesCol.list().filter(i => i.status !== 'resolved').length;
+    box.innerHTML = needHtml() + '<div class="kpi-grid">' +
+        '<div class="kpi hot" data-stat="k-n"><small>طلبات اليوم</small><b>' + k.n + '</b><em>' + k.done + ' مسلّمة</em>' + delta(k.n, y.n) + '</div>' +
+        '<div class="kpi" data-stat="k-min"><small>متوسط وقت التوصيل</small><b>' + (k.avgMin || '—') + '</b><em>دقيقة</em></div>' +
+        '<div class="kpi" data-stat="k-gmv"><small>قيمة الطلبات (GMV)</small><b>' + AM(k.gmv) + '</b><em>د.أ</em>' + delta(k.gmv, y.gmv, 1) + '</div>' +
+        '<div class="kpi" data-stat="k-net"><small>صافي المنصة</small><b>' + AM(k.net) + '</b><em>عمولة ' + AM(k.com) + ' − أكواد ' + AM(k.promo) + '</em>' + delta(k.net, y.net, 1) + '</div>' +
+        '<div class="kpi" data-stat="k-canc"><small>نسبة الإلغاء</small><b>' + k.rate + '٪</b><em>' + k.canc + ' ملغي</em></div>' +
+        '<div class="kpi" data-stat="k-rate"><small>رضا العملاء</small><b>' + k.rating + '</b><em>من 5</em></div>' +
+        '<button type="button" class="kpi" onclick="tabGo(\'screen-captains\')"><small>كباتن متصلون</small><b>' + live + '</b><em>من ' + capsCol.list().length + '</em></button>' +
+        '<button type="button" class="kpi' + (open ? ' warn' : '') + '" onclick="goTo(\'screen-issues\')"><small>بلاغات مفتوحة</small><b>' + open + '</b><em>اضغط للمراجعة</em></button></div>' + storeQuality();
+}
+let opsMap = null, opsLayer = null, opsSig = '';
+function renderOpsMap() {
+    const el = A$('opsMapEl'); if (!el || !window.L || scr() !== 'screen-dashboard') return;
+    if (!opsMap) { opsMap = HWMap.create(el, { center: HWMap.center(), zoom: 12 }); opsLayer = L.layerGroup().addTo(opsMap); }
+    const caps = capsCol.list().filter(c => c.lat != null && isLive(c)), act = allOrders.filter(HWOrders.isActive);
+    const stores = storePins();
+    const sig = caps.map(c => c.id + c.lat + c.lng).join() + '|' + act.map(o => o.id + o.status).join() + '|' + stores.map(x => x.id + x.p).join();
+    if (sig === opsSig) return; opsSig = sig; opsLayer.clearLayers(); const pts = [];
+    stores.forEach(x => { pts.push(x.p); L.marker(x.p, { icon: HWMap.ICON.store(x.id), zIndexOffset: 100 }).bindTooltip(x.name, { direction: 'top' }).addTo(opsLayer); });
+    caps.forEach(c => { const p = [c.lat, c.lng]; pts.push(p); L.marker(p, { icon: HWMap.ICON.cap(), zIndexOffset: 400 }).bindTooltip(c.name, { direction: 'top' }).addTo(opsLayer); });
+    act.forEach(o => {
+        const color = o.status === 'new' ? '#E8EF44' : o.status === 'accepted' ? '#25CED1' : '#0E3A3B';
+        if (o.storeLoc) { const p = [o.storeLoc.lat, o.storeLoc.lng]; pts.push(p); L.circleMarker(p, { radius: 8, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 }).bindTooltip(o.code + ' · ' + (o.storeName || ''), { direction: 'top' }).addTo(opsLayer); }
+        if (o.address && o.address.lat != null) { const p = [o.address.lat, o.address.lng]; pts.push(p); L.marker(p, { icon: HWMap.ICON.home() }).bindTooltip(o.code + ' · ' + HWOrders.label(o), { direction: 'top' }).addTo(opsLayer); }
+    });
+    A$('opsLbl').textContent = act.length + ' طلب نشط · ' + caps.length + ' كابتن';
+    opsMap.invalidateSize(); if (pts.length) HWMap.fit(opsMap, pts, HWMap.mpPad());
+}
+/* مواقع المتاجر التي حددتها الإدارة: تظهر على خرائط المنسقين فقط */
+function storePins() { return HWBiz.storeList().map(s => { const st = stCol.get(s.id) || {}; return st.lat != null ? { id: s.id, name: s.name, p: [st.lat, st.lng] } : null; }).filter(Boolean); }
+stCol.subscribe(() => { opsSig = ''; try { renderOpsMap(); } catch (e) {} });
+function renderHome() { renderKpis(); renderOpsMap(); }
+
+/* =========================================================
+   3) تسوية الكباتن
+   ========================================================= */
+function unsettled(cid) { return allOrders.filter(o => o.captain && o.captain.id === cid && o.status === 'delivered' && !o.settledAt); }
+function settleSum(list) { return list.reduce((a, o) => { const s = HWOrders.settle(o); a.n++; a.fee += s.fee; a.com += s.commission; a.promo += s.promo; a.due += s.due; a.col += s.collected; a.items += s.items; return a; }, { n: 0, fee: 0, com: 0, promo: 0, due: 0, col: 0, items: 0 }); }
+function settleBlock(cid) {
+    const l = unsettled(cid), t = settleSum(l), r = HWBiz.captainRating(cid, allOrders), iss = issuesCol.list().filter(i => i.captain && i.captain.id === cid).length;
+    return '<div class="stl"><div class="stl-h"><b>التسوية النقدية</b><span>' + (r.n ? '★ ' + r.avg.toFixed(1) + ' · ' : '') + iss + ' بلاغ</span></div>' +
+        '<div class="stl-k"><div><small>طلبات غير مسوّاة</small><b>' + t.n + '</b></div><div><small>عمولة المنصة</small><b>' + AM(t.com) + '</b></div><div><small>أكواد خصم (لصالحه)</small><b>' + AM(t.promo) + '</b></div><div class="due"><small>' + (t.due >= 0 ? 'المطلوب منه' : 'المطلوب له') + '</small><b>' + AM(Math.abs(t.due)) + ' د.أ</b></div></div>' +
+        '<div class="btn-row"><button type="button" class="ghost-btn" onclick="printSettlement(\'' + cid + '\')"' + (t.n ? '' : ' disabled') + '>طباعة الكشف</button><button type="button" class="submit-btn" onclick="settleCaptain(\'' + cid + '\')"' + (t.n ? '' : ' disabled') + '><span class="btn-label">تسجيل التسوية</span></button></div></div>';
+}
+function settleCaptain(cid) {
+    const l = unsettled(cid), t = settleSum(l), c = capsCol.get(cid) || {};
+    if (!l.length || !confirm((t.due >= 0 ? 'استلمت من ' : 'دفعت لـ ') + c.name + ' مبلغ ' + AM(Math.abs(t.due)) + ' د.أ عن ' + l.length + ' طلب؟')) return;
+    const at = Date.now(), by = actorName();
+    l.forEach(o => HWOrders.update(o.id, { settledAt: at, settledBy: by }, 'settled'));
+    logAct('settle', 'تسوية ' + c.name + ': ' + l.length + ' طلب · ' + (t.due >= 0 ? 'استلام ' : 'دفع ') + AM(Math.abs(t.due)) + ' د.أ');
+    closeCapSheet(); buzz(20); HWOrders.toast('تم تسجيل التسوية');
+}
+function printSettlement(cid) {
+    const l = unsettled(cid).sort((a, b) => a.createdAt - b.createdAt), t = settleSum(l), c = capsCol.get(cid) || {};
+    HWBiz.printHtml('كشف تسوية ' + c.name, HWBiz.reportHead('كشف تسوية كابتن', AE(c.name) + ' · ' + AE(c.phone || '') + ' · ' + new Date().toLocaleDateString('ar-JO')) + '<div class="wrap">' +
+        '<div class="kp"><div><small>عدد الطلبات</small><b>' + t.n + '</b></div><div><small>رسوم التوصيل</small><b>' + AM(t.fee) + '</b></div><div><small>عمولة المنصة</small><b>' + AM(t.com) + '</b></div><div><small>' + (t.due >= 0 ? 'المستحق للمنصة' : 'المستحق للكابتن') + '</small><b>' + AM(Math.abs(t.due)) + '</b></div></div>' +
+        '<h2>تفاصيل الطلبات</h2><table><thead><tr><th>الطلب</th><th>التاريخ</th><th>المتجر</th><th>دفع للمتجر</th><th>حصّل</th><th>التوصيل</th><th>العمولة</th><th>كود</th></tr></thead><tbody>' +
+        l.map(o => { const s = HWOrders.settle(o); return '<tr><td>' + AE(o.code) + '</td><td>' + new Date(o.createdAt).toLocaleDateString('ar-JO') + '</td><td>' + AE(o.storeName || o.from || '') + '</td><td>' + AM(s.items) + '</td><td>' + AM(s.collected) + '</td><td>' + AM(s.fee) + '</td><td>' + AM(s.commission) + '</td><td>' + (s.promo ? '−' + AM(s.promo) : '') + '</td></tr>'; }).join('') +
+        '</tbody><tfoot><tr><td colspan="3">الإجمالي</td><td>' + AM(t.items) + '</td><td>' + AM(t.col) + '</td><td>' + AM(t.fee) + '</td><td>' + AM(t.com) + '</td><td>' + AM(t.promo) + '</td></tr></tfoot></table>' +
+        '<div class="sig"><div>توقيع الكابتن</div><div>توقيع المسؤول: ' + AE(actorName()) + '</div></div><div class="ft">صادر من Admin Panel · HIGHWAY Delivery</div></div>');
+}
+/* إضافة قسم التسوية لورقة الكابتن الموجودة */
+(function () {
+    const _o = window.openCapSheet;
+    window.openCapSheet = function (id) { _o(id); if (id) A$('capSheetBody').insertAdjacentHTML('beforeend', settleBlock(id)); };
+    const _s = window.saveCap; window.saveCap = async function () { const n = A$('cpName').value.trim(); await _s(); if (!A$('capSheet').classList.contains('show')) logAct('cap', (editCapId ? 'تعديل الكابتن ' : 'إضافة الكابتن ') + n); };
+    const _t = window.toggleCapActive; window.toggleCapActive = function () { const c = capsCol.get(editCapId); _t(); logAct('cap', (c.active === false ? 'تفعيل ' : 'إيقاف ') + 'الكابتن ' + c.name); };
+    const _a = window.setAuto; window.setAuto = function (v) { _a(v); logAct('auto', v ? 'تشغيل الإسناد التلقائي' : 'التحويل للإسناد اليدوي'); };
+})();
+
+/* =========================================================
+   4) البلاغات
+   ========================================================= */
+function renderIssues() {
+    const box = A$('issBody'); if (!box) return;
+    const all = issuesCol.list().slice().sort((a, b) => b.at - a.at), l = all.filter(i => issFilter === 'all' || (issFilter === 'open' ? i.status !== 'resolved' : i.status === 'resolved'));
+    box.innerHTML = '<div class="seg">' + [['open', 'مفتوحة'], ['done', 'محلولة'], ['all', 'الكل']].map(f => '<button type="button" class="' + (issFilter === f[0] ? 'on' : '') + '" onclick="issFilter=\'' + f[0] + '\';renderIssues()">' + f[1] + '</button>').join('') + '</div>' +
+        (l.length ? l.map(i => { const o = allOrders.filter(x => x.id === i.orderId)[0];
+            return '<div class="iss-card' + (i.status === 'resolved' ? ' done' : '') + '"><div class="iss-top"><b>' + AE(i.reason) + '</b><span>' + HWOrders.ago(i.at) + '</span></div>' +
+                '<small>' + AE(i.code) + ' · ' + AE(i.storeName || '') + ' · الكابتن ' + AE(i.captain ? i.captain.name : '') + '</small>' + (i.note ? '<p>' + AE(i.note) + '</p>' : '') +
+                (i.status === 'resolved' ? '<p class="res">✓ ' + AE(i.resolution || 'تم الحل') + ' — ' + AE(i.resolvedBy || '') + '</p>'
+                    : '<div class="btn-row">' + (o ? '<button type="button" class="ghost-btn" onclick="openOrderSheet(\'' + o.id + '\')">الطلب</button>' : '') + (o && o.podAt ? '<button type="button" class="ghost-btn" onclick="showPod(\'' + o.id + '\')">صورة الإثبات</button>' : '') + (i.captain && i.captain.phone ? '<a class="ghost-btn" href="tel:' + AE(i.captain.phone) + '">اتصال</a>' : '') + '<button type="button" class="submit-btn" onclick="resolveIssue(\'' + i.id + '\')"><span class="btn-label">تم الحل</span></button></div>') + '</div>'; }).join('')
+            : '<div class="empty-orders">لا توجد بلاغات هنا</div>');
+}
+/* صورة إثبات الوصول التي التقطها الكابتن عند الباب */
+function showPod(id) {
+    const o = HWOrders.get(id); if (!o) return;
+    admSheet(aHead(AE(o.code), 'صورة الإثبات') + '<div class="pod-box" id="podBox"><span class="mut">جاري التحميل…</span></div>');
+    HWBiz.getDoc('pod', id).then(d => { const b = A$('podBox'); if (!b) return;
+        b.innerHTML = d && d.data ? '<img src="' + AE(d.data) + '" alt="صورة الإثبات"><small class="mut">التُقطت ' + HWOrders.fmtTime(d.at) + (o.captain ? ' · ' + AE(o.captain.name) : '') + '</small>' : '<span class="mut">لم تُرفع الصورة</span>'; });
+}
+function resolveIssue(id) {
+    const i = issuesCol.get(id); if (!i) return;
+    const how = prompt('كيف تم حل البلاغ؟', 'تم التواصل وحل المشكلة'); if (how === null) return;
+    issuesCol.patch(id, { status: 'resolved', resolution: how, resolvedBy: actorName(), resolvedAt: Date.now() });
+    logAct('issue', 'حل بلاغ ' + i.code + ': ' + i.reason); buzz(15);
+}
+function renderIssueBadge() {
+    const n = issuesCol.list().filter(i => i.status !== 'resolved').length, b = A$('mgBadge');
+    if (b) { b.textContent = n; b.classList.toggle('on', n > 0); }
+}
+
+/* =========================================================
+   5) الإدارة
+   ========================================================= */
+const MG_TABS = [['stores', 'المتاجر'], ['prices', 'أسعار التوصيل'], ['offers', 'العروض'], ['promos', 'أكواد الخصم'], ['targets', 'أهداف الكباتن'], ['ann', 'الإعلانات'], ['customers', 'العملاء'], ['settings', 'الذروة والنقد'], ['team', 'الفريق']];
+function renderManage() {
+    const box = A$('mgBody'); if (!box) return;
+    const open = issuesCol.list().filter(i => i.status !== 'resolved').length;
+    box.innerHTML = '<div class="mg-quick"><button type="button" onclick="goTo(\'screen-issues\')"><b>' + open + '</b><span>بلاغات مفتوحة</span></button><button type="button" onclick="goTo(\'screen-log\')"><b>' + logCol.list().length + '</b><span>سجل النشاط</span></button></div>' +
+        '<div class="seg mg-seg">' + MG_TABS.map(t => '<button type="button" class="' + (mgTab === t[0] ? 'on' : '') + '" onclick="mgTab=\'' + t[0] + '\';renderManage()">' + t[1] + '</button>').join('') + '</div>' +
+        ({ stores: mgStores, prices: mgPrices, offers: mgOffers, promos: mgPromos, targets: mgTargets, ann: mgAnn, customers: mgCustomers, settings: mgSettings, team: mgTeam })[mgTab]();
+}
+
+/* ---------- العروض (لكل المتاجر) ---------- */
+function mgOffers() {
+    const l = HWBiz.offers.list().slice().sort((a, b) => (b.active !== false) - (a.active !== false));
+    return '<button type="button" class="submit-btn mg-add" onclick="openOfferAdm(null)"><span class="btn-label">+ عرض جديد</span></button>' +
+        (l.map(o => '<div class="mg-card' + (HWBiz.live(o) ? '' : ' off') + '"><div class="mg-top"><span class="mg-ic">%</span><div><b>' + AE(o.title) + '</b><small>' + AE(storeName(o.storeId)) + ' · ' + (o.percent ? o.percent + '٪' : 'إعلان') + (o.minOrder ? ' فوق ' + AM(o.minOrder) : '') + (o.endsAt ? ' · حتى ' + new Date(o.endsAt).toLocaleDateString('ar-JO') : '') + '</small></div>' +
+            '<button type="button" class="sw sm' + (o.active !== false ? ' on' : '') + '" onclick="toggleCol(\'offers\',\'' + o.id + '\')" aria-label="تفعيل"></button><button type="button" class="more-link inl" onclick="openOfferAdm(\'' + o.id + '\')">تعديل</button></div></div>').join('') || '<div class="empty-orders">لا توجد عروض</div>');
+}
+function openOfferAdm(id) {
+    admEdit = id; const o = id ? HWBiz.offers.get(id) : { storeId: (storesAll()[0] || {}).id, title: '', percent: 10, minOrder: 0 };
+    admSheet(aHead('العروض', id ? 'تعديل العرض' : 'عرض جديد') +
+        '<div class="field"><label for="ofStore">المتجر</label><select id="ofStore">' + storesAll().map(s => '<option value="' + s.id + '"' + (s.id === o.storeId ? ' selected' : '') + '>' + AE(s.name) + '</option>').join('') + '</select></div>' +
+        fld('ofTitle', 'العنوان', o.title) + fld('ofSub', 'تفاصيل <span class="opt">(اختياري)</span>', o.sub) +
+        '<div class="two">' + fld('ofPct', 'الخصم ٪ (يتحمّله المتجر)', o.percent, 'type="number" min="0" max="50"') + fld('ofMin', 'الحد الأدنى', o.minOrder, 'type="number" min="0" step="0.5"') + '</div>' +
+        fld('ofEnd', 'ينتهي في <span class="opt">(اختياري)</span>', dateVal(o.endsAt), 'type="date"') +
+        '<div class="btn-row">' + (id ? '<button type="button" class="ghost-btn dng" onclick="delCol(\'offers\',\'' + id + '\')">حذف</button>' : '') + '<button type="button" class="submit-btn" onclick="saveOfferAdm()"><span class="btn-label">حفظ</span></button></div>');
+}
+function saveOfferAdm() {
+    const t = A$('ofTitle').value.trim(); if (!t) { HWOrders.toast('اكتب عنوان العرض'); return; }
+    const rec = { storeId: A$('ofStore').value, title: t, sub: A$('ofSub').value.trim(), percent: Math.min(50, num('ofPct')), minOrder: num('ofMin'), endsAt: dateEnd(A$('ofEnd').value), demo: false };
+    if (admEdit) HWBiz.offers.patch(admEdit, rec); else HWBiz.offers.create(Object.assign({ active: true }, rec));
+    logAct('offer', (admEdit ? 'تعديل عرض: ' : 'عرض جديد: ') + t + ' (' + storeName(rec.storeId) + ')'); closeAdm(); renderManage();
+}
+
+/* ---------- أكواد الخصم (تتحمّلها المنصة) ---------- */
+function promoUses(code) { return allOrders.filter(o => o.promoCode === code && o.status !== 'cancelled'); }
+function mgPromos() {
+    const l = HWBiz.promos.list();
+    return '<p class="mut mg-note">خصم الكود تتحمّله المنصة: يُخصم من عمولتها عند تسوية الكابتن.</p><button type="button" class="submit-btn mg-add" onclick="openPromoAdm(null)"><span class="btn-label">+ كود جديد</span></button>' +
+        (l.map(p => { const u = promoUses(p.id), cost = u.reduce((a, o) => a + (Number(o.promoAmount) || 0), 0);
+            return '<div class="mg-card' + (p.active === false || (p.endsAt && p.endsAt < Date.now()) ? ' off' : '') + '"><div class="mg-top"><span class="mg-ic code">' + AE(p.id.slice(0, 3)) + '</span><div><b dir="ltr" style="text-align:right">' + AE(p.id) + '</b><small>' + AE(p.title || '') + ' · ' + (p.type === 'amount' ? AM(p.value) + ' د.أ' : p.value + '٪' + (p.max ? ' (حتى ' + AM(p.max) + ')' : '')) + ' · استُخدم ' + u.length + ' مرة · كلفة ' + AM(cost) + '</small></div>' +
+                '<button type="button" class="sw sm' + (p.active !== false ? ' on' : '') + '" onclick="toggleCol(\'promos\',\'' + p.id + '\')" aria-label="تفعيل"></button><button type="button" class="more-link inl" onclick="openPromoAdm(\'' + p.id + '\')">تعديل</button></div></div>'; }).join('') || '<div class="empty-orders">لا توجد أكواد</div>');
+}
+function openPromoAdm(id) {
+    admEdit = id; const p = id ? HWBiz.promos.get(id) : { id: '', title: '', type: 'percent', value: 10, max: 0, minOrder: 0, perUser: 1 };
+    admSheet(aHead('أكواد الخصم', id ? 'تعديل الكود' : 'كود جديد') +
+        fld('pmCode', 'الكود (أحرف إنجليزية وأرقام)', p.id, 'dir="ltr" autocapitalize="characters"' + (id ? ' disabled' : '')) + fld('pmTitle', 'الوصف للعميل', p.title) +
+        '<div class="two"><div class="field"><label for="pmType">النوع</label><select id="pmType"><option value="percent"' + (p.type !== 'amount' ? ' selected' : '') + '>نسبة ٪</option><option value="amount"' + (p.type === 'amount' ? ' selected' : '') + '>مبلغ ثابت</option></select></div>' + fld('pmVal', 'القيمة', p.value, 'type="number" min="0" step="0.5"') + '</div>' +
+        '<div class="two">' + fld('pmMax', 'أقصى خصم (د.أ)', p.max || '', 'type="number" min="0" step="0.5"') + fld('pmMin', 'الحد الأدنى للطلب', p.minOrder || 0, 'type="number" min="0" step="0.5"') + '</div>' +
+        '<div class="two">' + fld('pmPer', 'مرات الاستخدام لكل عميل', p.perUser || 1, 'type="number" min="1"') + fld('pmEnd', 'ينتهي في', dateVal(p.endsAt), 'type="date"') + '</div>' +
+        '<label class="chk"><input type="checkbox" id="pmFirst"' + (p.firstOrder ? ' checked' : '') + '> لأول طلب فقط</label>' +
+        '<div class="btn-row">' + (id ? '<button type="button" class="ghost-btn dng" onclick="delCol(\'promos\',\'' + id + '\')">حذف</button>' : '') + '<button type="button" class="submit-btn" onclick="savePromoAdm()"><span class="btn-label">حفظ</span></button></div>');
+}
+function savePromoAdm() {
+    const code = (admEdit || A$('pmCode').value).trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (code.length < 3) { HWOrders.toast('الكود 3 أحرف على الأقل'); return; }
+    if (!admEdit && HWBiz.promos.get(code)) { HWOrders.toast('هذا الكود موجود'); return; }
+    const rec = { title: A$('pmTitle').value.trim(), type: A$('pmType').value, value: num('pmVal'), max: num('pmMax'), minOrder: num('pmMin'), perUser: Math.max(1, parseInt(A$('pmPer').value, 10) || 1), endsAt: dateEnd(A$('pmEnd').value), firstOrder: A$('pmFirst').checked, demo: false };
+    if (!rec.value) { HWOrders.toast('أدخل قيمة الخصم'); return; }
+    if (admEdit) HWBiz.promos.patch(code, rec); else HWBiz.promos.create(Object.assign({ id: code, active: true }, rec));
+    logAct('promo', (admEdit ? 'تعديل كود ' : 'كود خصم جديد ') + code); closeAdm(); renderManage();
+}
+
+/* ---------- أهداف الكباتن اليومية ---------- */
+function mgTargets() {
+    const l = HWBiz.targets.list();
+    return '<p class="mut mg-note">تظهر للكباتن في الصفحة الرئيسية مع شريط التقدم، وتُصرف المكافأة عند التسوية.</p><button type="button" class="submit-btn mg-add" onclick="openTargetAdm(null)"><span class="btn-label">+ هدف جديد</span></button>' +
+        (l.map(t => { const hit = capsCol.list().filter(c => allOrders.filter(o => o.captain && o.captain.id === c.id && o.status === 'delivered' && HWOrders.isToday(o.updatedAt || o.createdAt)).length >= t.count);
+            return '<div class="mg-card' + (t.active === false ? ' off' : '') + '"><div class="mg-top"><span class="mg-ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg></span><div><b>' + AE(t.title || ('أكمل ' + t.count + ' طلبات')) + '</b><small>' + t.count + ' طلبات · مكافأة ' + AM(t.bonus) + ' د.أ · ' + (t.day ? 'ليوم ' + t.day : 'كل يوم') + ' · حققه اليوم: ' + (hit.map(c => c.name).join('، ') || 'لا أحد') + '</small></div>' +
+                '<button type="button" class="sw sm' + (t.active !== false ? ' on' : '') + '" onclick="toggleCol(\'targets\',\'' + t.id + '\')" aria-label="تفعيل"></button><button type="button" class="more-link inl" onclick="openTargetAdm(\'' + t.id + '\')">تعديل</button></div></div>'; }).join('') || '<div class="empty-orders">لا توجد أهداف</div>');
+}
+function openTargetAdm(id) {
+    admEdit = id; const t = id ? HWBiz.targets.get(id) : { title: '', count: 10, bonus: 3, day: '' };
+    admSheet(aHead('أهداف الكباتن', id ? 'تعديل الهدف' : 'هدف جديد') + fld('tgTitle', 'العنوان', t.title, 'placeholder="مثال: تحدي الويكند"') +
+        '<div class="two">' + fld('tgCount', 'عدد الطلبات', t.count, 'type="number" min="1"') + fld('tgBonus', 'المكافأة (د.أ)', t.bonus, 'type="number" min="0" step="0.5"') + '</div>' +
+        '<label class="chk"><input type="checkbox" id="tgToday"' + (t.day ? ' checked' : '') + '> لليوم فقط (وإلا يتكرر كل يوم)</label>' +
+        '<div class="btn-row">' + (id ? '<button type="button" class="ghost-btn dng" onclick="delCol(\'targets\',\'' + id + '\')">حذف</button>' : '') + '<button type="button" class="submit-btn" onclick="saveTargetAdm()"><span class="btn-label">حفظ</span></button></div>');
+}
+function saveTargetAdm() {
+    const rec = { title: A$('tgTitle').value.trim(), count: Math.max(1, parseInt(A$('tgCount').value, 10) || 1), bonus: num('tgBonus'), day: A$('tgToday').checked ? HWBiz.dayKey() : '' };
+    if (admEdit) HWBiz.targets.patch(admEdit, rec); else HWBiz.targets.create(Object.assign({ active: true }, rec));
+    logAct('target', (admEdit ? 'تعديل هدف: ' : 'هدف جديد: ') + rec.count + ' طلبات / ' + AM(rec.bonus) + ' د.أ'); closeAdm(); renderManage();
+}
+
+/* ---------- الإعلانات ---------- */
+const AUD = { customers: 'العملاء', stores: 'المتاجر', drivers: 'الكباتن', all: 'الجميع' };
+function mgAnn() {
+    const l = HWBiz.announcementsCol.list().slice().sort((a, b) => (b.at || 0) - (a.at || 0));
+    return '<button type="button" class="submit-btn mg-add" onclick="openAnnAdm(null)"><span class="btn-label">+ إعلان جديد</span></button>' +
+        (l.map(a => '<div class="mg-card' + (a.active === false || (a.endsAt && a.endsAt < Date.now()) ? ' off' : '') + '"><div class="mg-top"><span class="mg-ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11v2a1 1 0 0 0 1 1h3l5 4V6L7 10H4a1 1 0 0 0-1 1Z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg></span><div><b>' + AE(a.title) + '</b><small>إلى ' + AUD[a.target] + (a.endsAt ? ' · حتى ' + new Date(a.endsAt).toLocaleDateString('ar-JO') : '') + (a.body ? ' · ' + AE(a.body) : '') + '</small></div>' +
+            '<button type="button" class="sw sm' + (a.active !== false ? ' on' : '') + '" onclick="toggleCol(\'announcements\',\'' + a.id + '\')" aria-label="تفعيل"></button><button type="button" class="more-link inl" onclick="openAnnAdm(\'' + a.id + '\')">تعديل</button></div></div>').join('') || '<div class="empty-orders">لا توجد إعلانات</div>');
+}
+function openAnnAdm(id) {
+    admEdit = id; const a = id ? HWBiz.announcementsCol.get(id) : { target: 'customers', title: '', body: '' };
+    admSheet(aHead('الإعلانات', id ? 'تعديل الإعلان' : 'إعلان جديد') +
+        '<div class="field"><label for="anTarget">يظهر لـ</label><select id="anTarget">' + Object.keys(AUD).map(k => '<option value="' + k + '"' + (k === a.target ? ' selected' : '') + '>' + AUD[k] + '</option>').join('') + '</select></div>' +
+        fld('anTitle', 'العنوان', a.title) + '<div class="field"><label for="anBody">النص <span class="opt">(اختياري)</span></label><textarea id="anBody" rows="2">' + AE(a.body || '') + '</textarea></div>' + fld('anEnd', 'ينتهي في <span class="opt">(اختياري)</span>', dateVal(a.endsAt), 'type="date"') +
+        '<div class="btn-row">' + (id ? '<button type="button" class="ghost-btn dng" onclick="delCol(\'announcements\',\'' + id + '\')">حذف</button>' : '') + '<button type="button" class="submit-btn" onclick="saveAnnAdm()"><span class="btn-label">نشر</span></button></div>');
+}
+function saveAnnAdm() {
+    const t = A$('anTitle').value.trim(); if (!t) { HWOrders.toast('اكتب عنوان الإعلان'); return; }
+    const rec = { target: A$('anTarget').value, title: t, body: A$('anBody').value.trim(), endsAt: dateEnd(A$('anEnd').value) };
+    if (admEdit) HWBiz.announcementsCol.patch(admEdit, rec); else HWBiz.announcementsCol.create(Object.assign({ active: true, at: Date.now() }, rec));
+    logAct('ann', 'إعلان إلى ' + AUD[rec.target] + ': ' + t); closeAdm(); renderManage();
+}
+
+/* ---------- فريق العمليات (منسقون يدخلون لوحة الإدارة) ---------- */
+/* ---------- العملاء: من لم يستلم طلباته، والحظر ----------
+   الكابتن يسجّل "لم يستلم" مع صورة إثبات. بعد مرتين يظهر تحذير للمطعم ويُطلب تأكيد هاتفي، والإدارة تستطيع الحظر */
+const custCol = HWBiz.customers; custCol.subscribe(() => { if (scr() === 'screen-manage' && mgTab === 'customers') renderManage(); });
+/* صورة العميل: شخصية HIGHWAY حسب ما اختاره (من آخر طلب له) */
+function custAv(phone) { const o = allOrders.filter(x => x.customer && x.customer.phone === phone && x.customer.g).sort((a, b) => b.createdAt - a.createdAt)[0]; return 'art/av-' + (o && o.customer.g === 'f' ? 'f' : 'm') + '.png'; }
+function mgCustomers() {
+    const l = custCol.list().filter(c => c.noShows || c.blocked).sort((a, b) => (b.blocked - a.blocked) || (b.noShows || 0) - (a.noShows || 0));
+    return '<p class="mut mg-note">يظهر هنا كل عميل لم يستلم طلبًا. بعد مرتين يرى المطعم تحذيرًا ويتصل بالعميل للتأكيد، والمحظور لا يستطيع الطلب.</p>' +
+        '<div class="pm-row mg-find"><input id="cuFind" inputmode="tel" dir="ltr" placeholder="07XXXXXXXX"><button type="button" class="pm-btn" onclick="custBlockByPhone()">حظر رقم</button></div>' +
+        (l.length ? l.map(c => '<div class="mg-card' + (c.blocked ? ' off' : '') + '"><div class="mg-top"><img src="' + custAv(c.id) + '" alt=""><div><b>' + AE(c.name || 'عميل') + '</b><small dir="ltr" style="text-align:right">' + AE(c.id) + '</small></div>' +
+            '<span class="mg-badge' + (c.blocked ? ' r' : c.noShows >= 2 ? ' y' : '') + '">' + (c.blocked ? 'محظور' : 'لم يستلم ' + (c.noShows || 0)) + '</span></div>' +
+            (c.lastNoShow ? '<small class="mut">آخر مرة: ' + HWOrders.ago(c.lastNoShow) + '</small>' : '') +
+            '<div class="mg-acts"><button type="button" class="ghost-btn' + (c.blocked ? '' : ' dng') + '" onclick="custSet(\'' + AE(c.id) + '\',{blocked:' + !c.blocked + '})">' + (c.blocked ? 'إلغاء الحظر' : 'حظر') + '</button>' +
+            '<button type="button" class="ghost-btn" onclick="custSet(\'' + AE(c.id) + '\',{noShows:0})">تصفير العداد</button><a class="ghost-btn" href="tel:' + AE(c.id) + '">اتصال</a></div></div>').join('')
+            : '<div class="empty-orders">لا يوجد عملاء مسجّل عليهم عدم استلام</div>');
+}
+function custSet(phone, p) {
+    const rec = custCol.get(phone) || {}, devs = [...new Set((rec.devs || []).concat(allOrders.filter(o => o.customer && o.customer.phone === phone && o.dev).map(o => o.dev)))];
+    if ('blocked' in p) { p.devs = devs; devs.forEach(d => HWBiz.putDoc('blockdev', d, p.blocked ? { blocked: true, phone, at: Date.now() } : null)); }   /* الحظر يشمل أجهزته، فلا يعود برقم جديد */
+    custCol.patch(phone, p, true); logAct('team', (p.blocked === true ? 'حظر العميل ' : p.blocked === false ? 'إلغاء حظر العميل ' : 'تصفير عداد العميل ') + phone); buzz(15); renderManage(); }
+function custBlockByPhone() {
+    const ph = (A$('cuFind').value || '').replace(/[^\d]/g, '').replace(/^962/, '0');
+    if (!/^07\d{8}$/.test(ph)) { HWOrders.toast('أدخل رقمًا صحيحًا 07XXXXXXXX'); return; }
+    if (!confirm('حظر الرقم ' + ph + '؟ لن يستطيع الطلب من التطبيق.')) return;
+    custSet(ph, { blocked: true });
+}
+
+/* ---------- رسوم الذروة/المطر وحد النقد مع الكابتن ---------- */
+const setCol = HWDB.col('settings');
+function mgSettings() {
+    const p = HWBiz.setting('pricing'), c = HWBiz.setting('cash'), lim = c.limit != null ? c.limit : (HW_CONFIG.cashLimit != null ? HW_CONFIG.cashLimit : 3);
+    const amts = [0.25, 0.5, 0.75, 1], lbls = ['مطر', 'ذروة', 'عطلة رسمية'];
+    return '<div class="mg-card set-card"><div class="mrow"><div><b>رسوم إضافية الآن</b><small class="mut">تُضاف لكل طلب جديد، وتذهب كاملة للكابتن بلا عمولة</small></div>' +
+        '<button type="button" class="sw' + (p.surgeOn ? ' on' : '') + '" onclick="saveSurge({surgeOn:' + !p.surgeOn + '})" aria-label="تفعيل الرسوم الإضافية"></button></div>' +
+        '<div class="chips">' + amts.map(a => '<button type="button" class="chip' + ((p.surgeAmt || .25) === a ? ' on' : '') + '" onclick="saveSurge({surgeAmt:' + a + '})"><bdi dir="ltr">+' + HWOrders.money(a) + '</bdi> د.أ</button>').join('') + '</div>' +
+        '<div class="chips">' + lbls.map(l => '<button type="button" class="chip' + ((p.surgeLabel || 'مطر') === l ? ' on' : '') + '" onclick="saveSurge({surgeLabel:\'' + l + '\'})">' + l + '</button>').join('') + '</div>' +
+        (p.surgeOn ? '<p class="set-live">مفعّلة: <bdi dir="ltr">+' + HWOrders.money(p.surgeAmt || .25) + '</bdi> د.أ (' + AE(p.surgeLabel || 'مطر') + ') على كل طلب جديد</p>' : '') + '</div>' +
+        '<div class="mg-card set-card"><div class="mrow"><div><b>حد النقد مع الكابتن</b><small class="mut">إذا تجاوز المستحق للشركة هذا المبلغ تتوقف عنه العروض حتى يسوّي</small></div></div>' +
+        '<div class="pm-row"><input id="cashLim" type="number" min="0" step="0.5" inputmode="decimal" dir="ltr" value="' + lim + '"><button type="button" class="pm-btn" onclick="saveCashLimit()">حفظ</button></div></div>';
+}
+function saveSurge(patch) {
+    const p = Object.assign({ surgeAmt: .25, surgeLabel: 'مطر' }, HWBiz.setting('pricing'), patch, { by: currentUser ? currentUser.label || currentUser.id : '', at: Date.now() });
+    setCol.patch('pricing', p, true); buzz(15);
+    if ('surgeOn' in patch) logAct('offer', (patch.surgeOn ? 'تفعيل رسوم ' : 'إيقاف رسوم ') + p.surgeLabel + ' +' + HWOrders.money(p.surgeAmt));
+    setTimeout(renderManage, 60);
+}
+function saveCashLimit() {
+    const v = Math.max(0, Math.round((parseFloat(A$('cashLim').value) || 0) * 100) / 100);
+    setCol.patch('cash', { limit: v, at: Date.now() }, true); logAct('team', 'حد النقد مع الكابتن: ' + HWOrders.money(v) + ' د.أ'); HWOrders.toast('تم الحفظ'); buzz(15);
+}
+
+function mgTeam() {
+    const l = staffCol.list();
+    return '<p class="mut mg-note">المنسق يدخل لوحة الإدارة باسم المستخدم وكلمة المرور، وتظهر أفعاله باسمه في سجل النشاط.</p><button type="button" class="submit-btn mg-add" onclick="openStaffAdm(null)"><span class="btn-label">+ منسق جديد</span></button>' +
+        '<div class="mg-card"><div class="mg-top"><span class="mg-ic">★</span><div><b>HIGHWAY Delivery</b><small dir="ltr" style="text-align:right">admin · مسؤول النظام</small></div></div></div>' +
+        l.map(s => '<div class="mg-card' + (s.active === false ? ' off' : '') + '"><div class="mg-top"><span class="mg-ic">' + AE(String(s.name).charAt(0)) + '</span><div><b>' + AE(s.name) + '</b><small dir="ltr" style="text-align:right">' + AE(s.user) + ' · ' + (s.active === false ? 'موقوف' : 'منسق عمليات') + '</small></div><button type="button" class="more-link inl" onclick="openStaffAdm(\'' + s.id + '\')">تعديل</button></div></div>').join('');
+}
+function openStaffAdm(id) {
+    admEdit = id; const s = id ? staffCol.get(id) : { name: '', user: '' };
+    admSheet(aHead('الفريق', id ? 'تعديل منسق' : 'منسق جديد') + fld('sfName', 'الاسم', s.name) + fld('sfUser', 'اسم المستخدم (إنجليزي)', s.user, 'dir="ltr" autocapitalize="off"') +
+        fld('sfPass', 'كلمة المرور' + (id ? ' <span class="opt">(اتركها فارغة لعدم التغيير)</span>' : ''), '', 'type="text" dir="ltr" autocomplete="off"') +
+        '<div class="btn-row">' + (id ? '<button type="button" class="ghost-btn dng" onclick="toggleCol(\'staff\',\'' + id + '\');closeAdm()">' + (s.active === false ? 'تفعيل' : 'إيقاف') + '</button>' : '') + '<button type="button" class="submit-btn" onclick="saveStaffAdm()"><span class="btn-label">حفظ</span></button></div>');
+}
+function saveStaffAdm() {
+    const name = A$('sfName').value.trim(), user = normUser(A$('sfUser').value), pass = A$('sfPass').value.trim();
+    if (!name || user.length < 3) { HWOrders.toast('أدخل الاسم واسم مستخدم صحيح'); return; }
+    if (allUsers().some(u => u.names.includes(user) && u.id !== admEdit)) { HWOrders.toast('اسم المستخدم مستخدم'); return; }
+    if (!admEdit && pass.length < 6) { HWOrders.toast('كلمة المرور 6 أحرف على الأقل'); return; }
+    const id = admEdit || 'st' + Date.now().toString(36), rec = { name, user, role: 'dispatcher' };
+    if (pass) rec.hash = sha256('HIGHWAY|' + id + '|' + pass);
+    if (admEdit) staffCol.patch(id, rec); else staffCol.create(Object.assign({ id, active: true }, rec));
+    logAct('team', (admEdit ? 'تعديل المنسق ' : 'إضافة المنسق ') + name); closeAdm(); renderManage();
+}
+
+/* ---------- أدوات مشتركة للمجموعات ---------- */
+const COLS = { offers: HWBiz.offers, promos: HWBiz.promos, targets: HWBiz.targets, announcements: HWBiz.announcementsCol, staff: staffCol };
+function toggleCol(name, id) { const c = COLS[name], d = c.get(id); if (!d) return; c.patch(id, { active: d.active === false }); logAct(name === 'staff' ? 'team' : name === 'announcements' ? 'ann' : name.replace(/s$/, ''), (d.active === false ? 'تفعيل: ' : 'إيقاف: ') + (d.title || d.name || id)); buzz(); renderManage(); }
+function delCol(name, id) { const c = COLS[name], d = c.get(id) || {}; if (!confirm('حذف نهائي؟')) return; c.remove(id); logAct(name === 'announcements' ? 'ann' : name.replace(/s$/, ''), 'حذف: ' + (d.title || id)); closeAdm(); renderManage(); }
+
+/* =========================================================
+   ربط الشاشات والتحديث
+   ========================================================= */
+Object.assign(TAB_OF, { 'screen-manage': 'manage', 'screen-issues': 'manage', 'screen-log': 'manage' });
+(function () {
+    const _g = window.goTo;
+    window.goTo = function (id) { _g(id); if (id === 'screen-dashboard') { opsSig = ''; setTimeout(renderHome, 60); } if (id === 'screen-manage') renderManage(); if (id === 'screen-issues') renderIssues(); if (id === 'screen-log') renderLog(); };
+    const _r = window.renderBoard;
+    window.renderBoard = function () { _r(); if (scr() === 'screen-dashboard') renderHome(); if (scr() === 'screen-manage' && mgTab !== 'prices') renderManage(); };
+})();
+function refreshAdm() { const s = scr(); if (s === 'screen-dashboard') renderHome(); else if (s === 'screen-manage' && mgTab !== 'prices') renderManage(); else if (s === 'screen-issues') renderIssues(); else if (s === 'screen-log') renderLog(); renderIssueBadge(); }
+[logCol, issuesCol, stCol, staffCol, HWBiz.offers, HWBiz.promos, HWBiz.targets, HWBiz.announcementsCol].forEach(c => c.subscribe(refreshAdm));
+capsCol.subscribe(() => { if (scr() === 'screen-dashboard') renderHome(); });
+let lastIss = null;
+issuesCol.subscribe(l => {                               // بلاغ جديد من كابتن: تنبيه صوتي
+    const ids = l.filter(i => i.status !== 'resolved').map(i => i.id);
+    if (lastIss && ids.some(i => lastIss.indexOf(i) < 0)) { HWNotify.play('alert'); HWOrders.toast('بلاغ جديد من كابتن'); HWNotify.notify('HIGHWAY · بلاغ', 'بلاغ جديد من كابتن'); }
+    lastIss = ids;
+});
+document.addEventListener('DOMContentLoaded', () => setTimeout(renderHome, 400));
+
+/* الإشعارات الحقيقية: بلاغات وطلبات متأخرة حتى واللوحة مغلقة */
+HWPush.init('admin', () => (currentUser ? currentUser.id : ''), { open: (id) => { if (HWOrders.get(id)) openOrderSheet(id); else goTo('screen-issues'); } });
+
+/* صيانة يومية من لوحة الإدارة (بدون خادم):
+   1) نقل الطلبات المنتهية الأقدم من 45 يومًا إلى orders_archive، فتبقى قراءة الطلبات خفيفة وسريعة
+   2) نسخ التقييمات إلى مجموعة ratings الصغيرة التي يقرأ منها تطبيق العملاء متوسط تقييم كل متجر */
+function dailyUpkeep() {
+    if (!currentUser || HWDB.mode !== 'remote') return;
+    const K = 'hw-upkeep-day', day = new Date().toDateString();
+    try { if (localStorage.getItem(K) === day) return; localStorage.setItem(K, day); } catch (e) {}
+    const now = Date.now(), raw = HWOrders._raw(), R = HWDB.col('ratings');
+    R.ready().then(() => {
+        const have = {}; R.list().forEach(r => { have[r.id] = 1; });
+        HWOrders.list().filter(o => o.rating && !have[o.id]).forEach(o => R.replace(o.id, { storeId: o.storeId || '', captainId: o.captain ? o.captain.id : '', store: o.rating.store || 0, captain: o.rating.captain || 0, at: o.rating.at || now }));
+    });
+    const old = HWOrders.list().filter(o => (o.status === 'delivered' && (o.settledAt || !HWOrders.isMarket(o)) || o.status === 'cancelled') && (o.updatedAt || o.createdAt) < now - 45 * 864e5);
+    old.slice(0, 300).forEach(o => raw.send('PUT', '/orders_archive/' + o.id + '.json', o).then(ok => { if (ok) HWDB.col('orders').remove(o.id); }));
+}
+/* طلبات قديمة بلا مفاتيح القراءة المحدودة: تُضاف ليراها المتجر والكابتن (تعمل عند كل فتح، وتنتهي حين لا يبقى شيء) */
+function backfillKeys() {
+    if (!currentUser) return;
+    HWOrders.list().filter(o => (o.storeId && !o.storeKey) || (o.captain && o.captain.id && !o.capKey)).slice(0, 500).forEach(o => {
+        const k = {}; if (o.storeId && !o.storeKey) k.storeKey = o.storeId + '|' + o.createdAt; if (o.captain && o.captain.id && !o.capKey) k.capKey = o.captain.id + '|' + o.createdAt;
+        HWOrders.patchLite(o.id, k);
+    });
+}
+setTimeout(() => { dailyUpkeep(); backfillKeys(); }, 8000);
