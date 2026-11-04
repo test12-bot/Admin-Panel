@@ -43,8 +43,6 @@
 :root[data-theme="dark"] .user-menu{background:var(--surface)}
 :root[data-theme="dark"] .um-head img{background:var(--surface)}
 :root[data-theme="dark"] .pf-cover{--ink:#0E3A3B;--teal-800:#0E3A3B;--teal-900:#0E3A3B;--ink-soft:rgba(14,58,59,.72);--white:#fff;--surface:#fff;--cream:#F3F0E7;--cream-line:#E7E2D3;color:#0E3A3B}
-:root[data-theme="dark"] .pf-avatar{background:var(--surface)}
-:root[data-theme="dark"] .pf-verified{--ink:#0E3A3B;--teal-800:#0E3A3B;--teal-900:#0E3A3B;--ink-soft:rgba(14,58,59,.72);--white:#fff;--surface:#fff;--cream:#F3F0E7;--cream-line:#E7E2D3;color:#0E3A3B}
 :root[data-theme="dark"] .pf-logout{background:var(--surface)}
 :root[data-theme="dark"] .modal-title::after{--ink:#0E3A3B;--teal-800:#0E3A3B;--teal-900:#0E3A3B;--ink-soft:rgba(14,58,59,.72);--white:#fff;--surface:#fff;--cream:#F3F0E7;--cream-line:#E7E2D3;color:#0E3A3B}
 :root[data-theme="dark"] .modal-summary,:root[data-theme="dark"] .pickup-pill{--ink:#0E3A3B;--teal-800:#0E3A3B;--teal-900:#0E3A3B;--ink-soft:rgba(14,58,59,.72);--white:#fff;--surface:#fff;--cream:#F3F0E7;--cream-line:#E7E2D3;color:#0E3A3B}
@@ -123,7 +121,7 @@
 :root[data-theme="dark"] .mrow .em{--ink:#0E3A3B;--teal-800:#0E3A3B;--teal-900:#0E3A3B;--ink-soft:rgba(14,58,59,.72);--white:#fff;--surface:#fff;--cream:#F3F0E7;--cream-line:#E7E2D3;color:#0E3A3B}
 :root[data-theme="dark"] .auto-card.on,:root[data-theme="dark"] .stat.hot{--ink:#0E3A3B;--teal-800:#0E3A3B;--teal-900:#0E3A3B;--ink-soft:rgba(14,58,59,.72);--white:#fff;--surface:#fff;--cream:#F3F0E7;--cream-line:#E7E2D3;color:#0E3A3B}
 :root[data-theme="dark"] .auto-card.on .ac-ic{background:#0F4446!important;--cream:#F3F0E7;--white:#fff;--surface:rgba(255,255,255,.14)}
-:root[data-theme="dark"] .action-card .glyph,:root[data-theme="dark"] .action-card.prep .glyph,:root[data-theme="dark"] .rest-card .ico,:root[data-theme="dark"] .rest-card.custom .ico,:root[data-theme="dark"] .pf-verified{--ink:#0E3A3B;--teal-800:#0E3A3B;--teal-900:#0E3A3B;--ink-soft:rgba(14,58,59,.72);--white:#fff;--surface:#fff;--cream:#F3F0E7;--cream-line:#E7E2D3;color:#0E3A3B}
+:root[data-theme="dark"] .action-card .glyph,:root[data-theme="dark"] .action-card.prep .glyph,:root[data-theme="dark"] .rest-card .ico,:root[data-theme="dark"] .rest-card.custom .ico{--ink:#0E3A3B;--teal-800:#0E3A3B;--teal-900:#0E3A3B;--ink-soft:rgba(14,58,59,.72);--white:#fff;--surface:#fff;--cream:#F3F0E7;--cream-line:#E7E2D3;color:#0E3A3B}
 :root[data-theme="dark"] .action-card.confirm .glyph{--ink:#0E3A3B;--teal-800:#0E3A3B;--teal-900:#0E3A3B;--ink-soft:rgba(14,58,59,.72);--white:#fff;--surface:#fff;--cream:#F3F0E7;--cream-line:#E7E2D3;color:#0E3A3B}
 :root[data-theme="dark"] .action-card .glyph.fb,:root[data-theme="dark"] .action-card .glyph.wa{background:#0F4446!important;--cream:#F3F0E7;--white:#fff;--surface:rgba(255,255,255,.14)}
 :root[data-theme="dark"] .submit-btn{--ink:#0E3A3B;--teal-800:#0E3A3B;--teal-900:#0E3A3B;--ink-soft:rgba(14,58,59,.72);--white:#fff;--surface:#fff;--cream:#F3F0E7;--cream-line:#E7E2D3;color:#0E3A3B}

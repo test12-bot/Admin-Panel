@@ -704,7 +704,7 @@ function submitAssign(wa) {
     setInvalid('asNameField', !name); setInvalid('asPhoneField', !phone.ok); setInvalid('asReasonField', changing && !reason);
     if (!name || !phone.ok || (changing && !reason)) return;
     const cd = HWDB.col('captains').list().filter(c => c.name === name)[0];
-    const patch = { captain: Object.assign({ name: name, phone: phone.value }, cd ? { id: cd.id } : {}), eta: formatTime12h(eta), claimBy: cd ? cd.id : null, offerTo: null, offerAt: 0 };
+    const patch = { captain: Object.assign({ name: name, phone: phone.value }, cd ? { id: cd.id, av: cd.av === 'f' ? 'f' : 'm', pv: cd.pv || 0 } : {}), eta: formatTime12h(eta), claimBy: cd ? cd.id : null, offerTo: null, offerAt: 0 };
     if (o.status === 'new') patch.status = 'accepted';
     if (changing) patch.reassigns = (o.reassigns || []).concat([{ from: o.captain.name, to: name, reason, at: Date.now(), by: actorName() }]);
     HWOrders.update(o.id, patch, changing ? 'reassigned' : null);

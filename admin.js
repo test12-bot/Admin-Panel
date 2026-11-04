@@ -141,15 +141,25 @@ function renderOpsMap() {
     const stores = storePins();
     const sig = caps.map(c => c.id + c.lat + c.lng).join() + '|' + act.map(o => o.id + o.status).join() + '|' + stores.map(x => x.id + x.p).join();
     if (sig === opsSig) return; opsSig = sig; opsLayer.clearLayers(); const pts = [];
-    stores.forEach(x => { pts.push(x.p); L.marker(x.p, { icon: HWMap.ICON.store(x.id), zIndexOffset: 100 }).bindTooltip(x.name, { direction: 'top' }).addTo(opsLayer); });
+    /* حالة طلبات كل متجر تظهر على إطار شعاره: أحمر بانتظار كابتن، فيروزي الكابتن في الطريق للمتجر، داكن في الطريق للعميل */
+    const stOf = storeStates(act);
+    stores.forEach(x => { pts.push(x.p); L.marker(x.p, { icon: HWMap.ICON.store(x.id, stOf[x.id]), zIndexOffset: stOf[x.id] ? 300 : 100 }).bindTooltip(x.name, { direction: 'top' }).addTo(opsLayer); });
     caps.forEach(c => { const p = [c.lat, c.lng]; pts.push(p); L.marker(p, { icon: HWMap.ICON.cap(), zIndexOffset: 400 }).bindTooltip(c.name, { direction: 'top' }).addTo(opsLayer); });
+    const COLOR = { n: '#EF0000', a: '#25CED1', p: '#0E3A3B' }, pinned = {}; stores.forEach(x => { pinned[x.id] = 1; });
     act.forEach(o => {
-        const color = o.status === 'new' ? '#E8EF44' : o.status === 'accepted' ? '#25CED1' : '#0E3A3B';
-        if (o.storeLoc) { const p = [o.storeLoc.lat, o.storeLoc.lng]; pts.push(p); L.circleMarker(p, { radius: 8, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 }).bindTooltip(o.code + ' · ' + (o.storeName || ''), { direction: 'top' }).addTo(opsLayer); }
+        const k = o.status === 'new' ? 'n' : o.status === 'accepted' ? 'a' : 'p';
+        /* نقطة استلام ليست متجرًا مسجّلًا (طلب يدوي): دائرة بلون الحالة */
+        if (o.storeLoc && !pinned[o.storeId]) { const p = [o.storeLoc.lat, o.storeLoc.lng]; pts.push(p); L.circleMarker(p, { radius: 8, color: '#fff', weight: 2, fillColor: COLOR[k], fillOpacity: 1 }).bindTooltip(o.code + ' · ' + (o.storeName || ''), { direction: 'top' }).addTo(opsLayer); }
         if (o.address && o.address.lat != null) { const p = [o.address.lat, o.address.lng]; pts.push(p); L.marker(p, { icon: HWMap.ICON.home() }).bindTooltip(o.code + ' · ' + HWOrders.label(o), { direction: 'top' }).addTo(opsLayer); }
     });
     A$('opsLbl').textContent = act.length + ' طلب نشط · ' + caps.length + ' كابتن';
     opsMap.invalidateSize(); if (pts.length) HWMap.fit(opsMap, pts, HWMap.mpPad());
+}
+/* أهم حالة لطلبات كل متجر الآن: n بانتظار كابتن ← a الكابتن في الطريق للمتجر ← p في الطريق للعميل */
+function storeStates(act) {
+    const RANK = { n: 3, a: 2, p: 1 }, stOf = {};
+    act.forEach(o => { const k = o.status === 'new' ? 'n' : o.status === 'accepted' ? 'a' : 'p'; if (o.storeId && (!stOf[o.storeId] || RANK[k] > RANK[stOf[o.storeId]])) stOf[o.storeId] = k; });
+    return stOf;
 }
 /* مواقع المتاجر التي حددتها الإدارة: تظهر على خرائط المنسقين فقط */
 function storePins() { return HWBiz.storeList().map(s => { const st = stCol.get(s.id) || {}; return st.lat != null ? { id: s.id, name: s.name, p: [st.lat, st.lng] } : null; }).filter(Boolean); }
