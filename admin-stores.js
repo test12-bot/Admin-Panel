@@ -43,6 +43,7 @@ function openStoreAdm(sid) {
         erRow('الاسم والقسم', AE(s.name) + ' · ' + AE(s.cat || '—'), "openStoreForm('" + sid + "','sfN')") +
         erRow('رقم المتجر', s.phone ? '<bdi dir="ltr">' + AE(s.phone) + '</bdi>' : 'غير مضاف', "openStoreForm('" + sid + "','sfPh')", s.phone ? '' : 'warn') +
         erRow('العنوان', AE(s.addr || 'غير مضاف'), "openStoreForm('" + sid + "','sfA')", s.addr ? '' : 'warn') +
+        erRow('للطباعة بالإنجليزية', s.nameEn && s.addrEn ? '<bdi dir="ltr">' + AE(s.nameEn) + ' · ' + AE(s.addrEn) + '</bdi>' : 'غير مضاف: تُطبع البيانات العربية في قائمة الأسعار', "openStoreForm('" + sid + "','sfNe')", s.nameEn && s.addrEn ? '' : 'warn') +
         erRow('الموقع على الخريطة', st.lat != null ? 'محدد' : 'غير محدد: الكابتن لن يرى مكان المتجر', "openStoreLocA('" + sid + "')", st.lat != null ? '' : 'warn') +
         erRow('أسعار التوصيل', '<bdi>' + pr + '</bdi> <span>منطقة</span>' + (own ? '' : ' <span>من القائمة الأساسية</span>'), "openStorePrices('" + sid + "')") +
         erRow('المنيو', items ? '<bdi>' + items + '</bdi> <span>صنف</span>' : 'لا توجد أصناف بعد', "openMenuAdm('" + sid + "')", items ? '' : 'warn') +
@@ -76,6 +77,8 @@ function openStoreForm(sid, focus) {
     admSheet(aHead('المتاجر', sid ? 'بيانات المتجر' : 'متجر جديد') +
         '<div class="two">' + fld('sfN', 'اسم المتجر', s.name) + fld('sfC', 'القسم', s.cat, 'list="sfCats" placeholder="مثال: مطاعم"') + '</div><datalist id="sfCats">' + cats.map(c => '<option value="' + AE(c) + '">').join('') + '</datalist>' +
         '<div class="two">' + fld('sfPh', 'رقم المتجر', s.phone || '', 'type="tel" dir="ltr" inputmode="tel" placeholder="07XXXXXXXX"') + fld('sfA', 'العنوان', s.addr || '', 'placeholder="مثال: السرو، طريق السلط"') + '</div>' +
+        '<div class="two">' + fld('sfNe', 'الاسم بالإنجليزية', s.nameEn || '', 'dir="ltr" placeholder="Bullgurz"') + fld('sfAe', 'العنوان بالإنجليزية', s.addrEn || '', 'dir="ltr" placeholder="Al-Saro, Al-Salt Road"') + '</div>' +
+        '<p class="mut mg-note">يُطبع الاسم والعنوان بالإنجليزية في قائمة الأسعار</p>' +
         '<div class="two">' + fld('sfKm', 'أقصى مسافة توصيل (كم)', s.maxKm || HW_CONFIG.maxKm || 12, 'type="number" min="1" max="60" step="0.5" inputmode="decimal"') + fld('sfMin', 'الحد الأدنى للطلب (د.أ)', s.minOrder != null ? s.minOrder : (HW_CONFIG.minOrder || 0), 'type="number" min="0" max="50" step="0.5" inputmode="decimal"') + '</div>' +
         '<h4 class="adm-sub">حساب الدخول لتطبيق المتجر</h4>' + '<div class="two">' + fld('sfU', 'اسم المستخدم (إنجليزي)', s.user, 'dir="ltr" autocapitalize="off" autocomplete="off"') +
         fld('sfP', 'كلمة المرور' + (sid ? ' <span class="opt">(اتركها فارغة لعدم التغيير)</span>' : ''), '', 'type="text" dir="ltr" autocomplete="off"') + '</div>' +
@@ -94,7 +97,9 @@ function saveStoreForm() {
     const phone = A$('sfPh').value.replace(/[^\d+]/g, ''), addr = A$('sfA').value.trim();
     if (phone && !/^(\+?962|0)\d{8,9}$/.test(phone)) { HWOrders.toast('رقم المتجر غير صحيح'); return; }
     const maxKm = Math.max(1, Math.min(60, parseFloat(A$('sfKm').value) || HW_CONFIG.maxKm || 12)), minOrder = Math.max(0, Math.min(50, parseFloat(A$('sfMin').value) || 0));
-    const rec = { name, cat, user, phone, addr, maxKm, minOrder };
+    const nameEn = A$('sfNe').value.trim(), addrEn = A$('sfAe').value.trim();
+    if (/[\u0600-\u06FF]/.test(nameEn + addrEn)) { HWOrders.toast('اكتب الاسم والعنوان للطباعة بأحرف إنجليزية'); return; }
+    const rec = { name, cat, user, phone, addr, nameEn, addrEn, maxKm, minOrder };
     if (pass) rec.hash = sha256('HIGHWAY|' + id + '|' + pass);
     if (admEdit) HWBiz.storesCol.patch(id, rec);
     else { HWBiz.storesCol.create(Object.assign({ id, active: true, sort: storesAll().length }, rec)); HWBiz.copyBasePrices(id); }
@@ -216,6 +221,9 @@ function plReset() {
 
 /* ---------- ربط ---------- */
 Object.assign(TAB_OF, { 'screen-menuadm': 'manage' });
+/* الرجوع من المنيو يعيد ورقة المتجر نفسه، لا قائمة المتاجر */
+Object.assign(SCREEN_META, { 'screen-menuadm': { back: 'screen-manage' } });
+(function () { const _b = window.goBack; window.goBack = function () { if (currentScreen === 'screen-menuadm' && mStore) { const sid = mStore; mgTab = 'stores'; goTo('screen-manage'); openStoreAdm(sid); return; } _b(); }; })();
 (function () { const _g = window.goTo; window.goTo = function (id) { _g(id); if (id === 'screen-menuadm') renderMenuAdm(); }; })();
 menusColA.subscribe(() => { if (scr() === 'screen-manage' && mgTab === 'stores') renderManage(); });
 HWBiz.storesCol.subscribe(() => { if (scr() === 'screen-manage' && mgTab !== 'prices') renderManage(); });

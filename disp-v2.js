@@ -24,7 +24,7 @@ function renderCaps() {
         '<div class="seg" id="capSeg">' + [['today', 'اليوم'], ['week', '٧ أيام'], ['all', 'الكل']].map(r => '<button type="button" data-r="' + r[0] + '"' + (capRange === r[0] ? ' class="on"' : '') + '>' + r[1] + '</button>').join('') + '</div>' +
         perfTable(list) +
         '<button type="button" class="submit-btn" style="margin:4px 0 14px" onclick="openCapSheet(null)"><span class="btn-label">+ إضافة كابتن</span></button>' +
-        (rows.length ? rows.map(r => '<div class="cap-card' + (r.c.active === false ? ' off' : '') + '" data-cid="' + CH(r.c.id) + '"><div class="cap-top"><span class="cap-ph"><img src="' + CH(HWBiz.capAv(r.c)) + '" alt=""><span class="cap-dot' + (r.c.online && r.c.active !== false ? ' on' : '') + '"></span></span><div class="cap-id"><b>' + CH(r.c.name) + '</b><small dir="ltr">' + CH(r.c.phone) + '</small></div><span class="cap-st">' + (r.c.active === false ? 'موقوف' : r.act ? 'في مهمة ' + CH(r.act.code) : r.c.online ? 'متاح' : 'غير متصل') + '</span></div>' +
+        (rows.length ? rows.map(r => '<div class="cap-card' + (r.c.active === false ? ' off' : '') + '" data-cid="' + CH(r.c.id) + '"><div class="cap-top"><span class="cap-ph"><img src="' + CH(HWBiz.capAv(r.c)) + '" alt=""><span class="cap-dot' + (r.c.online && r.c.active !== false ? ' on' : '') + '"></span></span><div class="cap-id"><b>' + CH(r.c.name) + '</b><small><span class="cap-no" dir="ltr">' + CH(r.c.num || '—') + '</span> · <span dir="ltr">' + CH(r.c.phone) + '</span></small></div><span class="cap-st">' + (r.c.active === false ? 'موقوف' : r.act ? 'في مهمة ' + CH(r.act.code) : r.c.online ? 'متاح' : 'غير متصل') + '</span></div>' +
             '<div class="cap-nums"><div><small>مسلّمة</small><b>' + r.n + '</b></div><div><small>التوصيل</small><b>' + HWOrders.money(r.t.fee) + '</b></div><div><small>عمولة المنصة</small><b>' + HWOrders.money(r.t.com) + '</b></div><div><small>صافيه</small><b>' + HWOrders.money(r.t.net) + '</b></div></div></div>').join('')
             : '<div class="empty-orders">لا يوجد كباتن بعد، أضف أول كابتن</div>');
 }
@@ -53,6 +53,7 @@ function openCapSheet(id) {
     editCapId = id; const c = id ? capsCol.get(id) : { name: '', phone: '', active: true };
     document.getElementById('capSheetBody').innerHTML = '<div class="sh-head"><div><small>الكباتن</small><h3>' + (id ? 'تعديل كابتن' : 'كابتن جديد') + '</h3></div></div>' +
         (id ? '<button type="button" class="cap-av-ed" onclick="capPhotoMenu()" aria-label="صورة الكابتن"><img class="pf-av" src="' + CH(HWBiz.capAv(c)) + '" alt=""><i class="ed-pen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></svg></i></button>' : '') +
+        (id ? '<p class="cap-no-l">رقم الكابتن <b dir="ltr">' + CH(c.num || '—') + '</b></p>' : '') +
         '<div class="field"><label for="cpName">الاسم</label><input type="text" id="cpName" value="' + CH(c.name) + '"></div>' +
         '<div class="field"><label for="cpPhone">رقم الهاتف</label><input type="tel" id="cpPhone" dir="ltr" inputmode="tel" value="' + CH(c.phone) + '" placeholder="07XXXXXXXX"></div>' +
         '<div class="field"><label for="cpPin">الرمز السري ' + (id ? '<span class="opt">(اتركه فارغًا لعدم التغيير)</span>' : '') + '</label><input type="text" id="cpPin" inputmode="numeric" dir="ltr" placeholder="4 أرقام على الأقل"></div>' +
@@ -91,7 +92,8 @@ async function saveCap() {
     if (capsCol.list().some(c => c.phone === phone && c.id !== editCapId)) return bad('هذا الرقم مسجل لكابتن آخر');
     const rec = { name, phone }; if (pin) rec.pin = await HW_sha256('HWK|' + phone + '|' + pin);
     else if (editCapId && capsCol.get(editCapId).phone !== phone) return bad('عند تغيير الرقم يجب تعيين رمز سري جديد');
-    if (editCapId) capsCol.patch(editCapId, rec); else capsCol.create(Object.assign({ id: 'k' + Date.now().toString(36), active: true, online: false }, rec));
+    if (editCapId) capsCol.patch(editCapId, rec);
+    else { const id = 'k' + Date.now().toString(36); capsCol.create(Object.assign({ id, active: true, online: false }, rec)); HWOrders.capNo().then(n => capsCol.patch(id, { num: n })).catch(() => {}); }
     closeCapSheet(); buzz(15); HWOrders.toast('تم حفظ الكابتن');
 }
 function toggleCapActive() { const c = capsCol.get(editCapId); capsCol.patch(editCapId, { active: c.active === false, online: false }); closeCapSheet(); }
@@ -158,7 +160,7 @@ document.addEventListener('click', (e) => {
     const b = e.target.closest('.as-cap'); if (!b) return;
     const c = capsCol.get(b.dataset.cap); if (!c) return;
     document.getElementById('asName').value = c.name; document.getElementById('asPhone').value = c.phone || '';
-    submitAssign(false);
+    submitAssign();
 });
 function renderCapMap() {
     const box = document.getElementById('capMapEl'); if (!box || !window.L) return;

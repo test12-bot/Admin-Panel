@@ -14,15 +14,14 @@ const SCREEN_META = {
   'screen-dashboard':  { back:null },
   'screen-restaurants':{ back:'screen-dashboard' },
   'screen-order':      { back:'screen-restaurants' },
-  'screen-confirm':    { back:'screen-dashboard' },
   'screen-profile':    { back:'screen-dashboard' },
   'screen-board':      { back:'screen-dashboard' },
   'screen-captains':   { back:'screen-dashboard' },
-  'screen-success':    { back:null },
+  'screen-support':    { back:'screen-dashboard' },
 };
 
 /* التبويب النشط لكل شاشة */
-const TAB_OF = { 'screen-dashboard': 'home', 'screen-restaurants': 'home', 'screen-order': 'home', 'screen-confirm': 'home', 'screen-success': 'home', 'screen-board': 'board', 'screen-captains': 'caps', 'screen-profile': 'profile' };
+const TAB_OF = { 'screen-dashboard': 'home', 'screen-restaurants': 'home', 'screen-order': 'home', 'screen-board': 'board', 'screen-captains': 'caps', 'screen-support': 'support' };
 let state = { pickup:{ name:"", isCustom:false, sid:'' } };
 let currentScreen = 'screen-dashboard';
 
@@ -210,39 +209,38 @@ function clearSession() {
 function applyUser(user) {
     currentUser = user;
     if (user) HWOrders.scope([{ by: 'createdAt', start: Date.now() - 40 * 864e5 }]);   /* الإدارة: آخر 40 يومًا (الأقدم في الأرشيف) */
-    document.getElementById('userWrap').style.display = user ? '' : 'none';
-    if (user) fillUserUI(user);
-    closeUserMenu();
+    if (user) fillUserUI(user); else HWHead.user(null);
     document.body.classList.toggle('authed', !!user);
     document.getElementById('appShell').inert = !user;
 }
 
 
-/* ---------- الحساب: الصورة، القائمة، صفحة الملف الشخصي ---------- */
-function setAvatar(img) { img.src = 'logo-icon.png'; }   /* شعار HIGHWAY لحسابات الإدارة */
+/* ---------- الحساب: صورة الإدارة (شعار HIGHWAY)، القائمة أعلى الشاشة، صفحة الملف الشخصي ---------- */
+const ADMIN_AV = 'art/av-hw.jpg';
 function fillUserUI(u) {
-    ['avatarImg', 'umImg', 'pfImg'].forEach(id => setAvatar(document.getElementById(id), u));
     const nm = u.label || 'HIGHWAY Delivery', role = u.role === 'dispatcher' ? 'منسق عمليات' : 'مسؤول النظام';
-    document.getElementById('umName').textContent = nm;
-    document.getElementById('umRole').textContent = role;
+    document.getElementById('pfImg').src = ADMIN_AV;
     document.getElementById('pfName').textContent = nm;
     document.getElementById('pfHandle').textContent = '@' + u.names[0];
     document.getElementById('pfChip').textContent = role;
     document.getElementById('pfUser').textContent = u.names[0];
+    HWHead.user({ img: ADMIN_AV, name: nm, role });
 }
-function closeUserMenu() {
-    const m = document.getElementById('userMenu'), b = document.getElementById('avatarBtn');
-    if (!m) return;
-    m.classList.remove('open'); m.setAttribute('aria-hidden', 'true'); m.inert = true;
-    b.setAttribute('aria-expanded', 'false');
+HWHead.init({
+    app: 'admin', logout: () => logout(),
+    items: [{ k: 'profile', t: 'الملف الشخصي', fn: () => { if (currentUser) goTo('screen-profile'); } }],
+    go: (k) => { if (/^support:/.test(k)) { tabGo('screen-support'); HWSupport.open(k.slice(8)); } else if (/^support/.test(k)) tabGo('screen-support'); else tabGo('screen-board'); }
+});
+/* الدعم: صندوق المحادثات + عدد غير المقروء على التبويب */
+function renderSupport() {
+    if (currentScreen === 'screen-support') HWSupport.inbox(document.getElementById('supBox'));
+    const n = HWSupport.unread(), b = document.getElementById('supBadge');
+    if (b) { b.textContent = n; b.classList.toggle('on', n > 0); }
 }
-function toggleUserMenu() {
-    const m = document.getElementById('userMenu');
-    if (m.classList.contains('open')) return closeUserMenu();
-    m.classList.add('open'); m.setAttribute('aria-hidden', 'false'); m.inert = false;
-    document.getElementById('avatarBtn').setAttribute('aria-expanded', 'true');
-}
-function openProfile() { closeUserMenu(); if (currentUser) goTo('screen-profile'); }
+HWSupport.init({
+    role: 'a', me: () => currentUser ? { uid: 'admin' } : null, onChange: renderSupport,
+    avatar: (t) => t.role === 's' ? HWBiz.logo(t.uid) : t.role === 'k' ? HWBiz.capAv(HWDB.col('captains').get(t.uid) || { id: t.uid }) : ''
+});
 
 /* الإطار الزجاجي يكبر ليظهر نموذج الدخول، وزر الرجوع يعيد الشاشة الافتتاحية كما كانت */
 let introCtl = null;
@@ -315,7 +313,7 @@ function logout() {
 
 /* ---------- التنقل ---------- */
 function goTo(id){
-  closeUserMenu();
+  HWHead.close();
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   currentScreen = id;
@@ -323,7 +321,7 @@ function goTo(id){
   document.getElementById('headerBack').classList.toggle('show', !!(SCREEN_META[id] || {}).back);
   window.scrollTo({ top:0, behavior:'auto' });
   // كل صفحة تُفتح "نظيفة" كأنها حُمّلت من جديد
-  if (id === 'screen-confirm') { document.getElementById('confirmForm').reset(); clearInvalid('confirmForm'); }
+  if (id === 'screen-support') renderSupport();
 }
 
 function goBack(){
@@ -339,11 +337,8 @@ function reloadSite(){
 
 function resetAndGo(id){
   document.getElementById('orderForm').reset();
-  document.getElementById('confirmForm').reset();
   clearInvalid('orderForm');
-  clearInvalid('confirmForm');
   state.pickup = { name:"", isCustom:false, sid:'' };
-  document.getElementById('successRef').style.display = 'none';
   goTo(id);
 }
 
@@ -383,11 +378,6 @@ function selectPickup(name, isCustom, sid){
 /* ---------- أدوات ---------- */
 function pad2(n){ return String(n).padStart(2,'0'); }
 
-function getDatePrefix(){
-  const d = new Date();
-  return `${String(d.getFullYear()).slice(-2)}${pad2(d.getMonth()+1)}${pad2(d.getDate())}`;
-}
-
 function setInvalid(fieldId, invalid){
   document.getElementById(fieldId).classList.toggle('invalid', invalid);
 }
@@ -409,10 +399,6 @@ function parsePhone(raw){
   if (!v) return { empty:true, ok:true, value:'' };
   const clean = v.replace(/[\s\-()]/g, '');
   return { empty:false, ok:/^\+?\d{7,15}$/.test(clean), value:clean };
-}
-
-function openWhatsApp(message){
-  window.open('https://wa.me/?text=' + encodeURIComponent(message), '_blank');
 }
 
 function setBtnLoading(btn, isLoading){
@@ -445,108 +431,23 @@ document.getElementById('orderForm').addEventListener('submit', function(e){
   const btn = document.getElementById('orderSubmitBtn');
   setBtnLoading(btn, true);
 
-  setTimeout(() => {
-    const notes = document.getElementById('orderNotes').value.trim() || 'لا يوجد';
-
-    const message =
-`*📢 طلب جديد متاح | رقم #${orderNumber}*
-*🏪 نقطة الاستلام*: ${pickupName}
-*💵 مطلوب دفعه*: ${orderValue} د.أ
-*📝 ملاحظات*: ${notes}
-
-———————————————
-*⚠️ تعليمات القبول:*
-*1- ⛔️ تأكد من جاهزيتك وتوفر المبلغ.*
-*2- 📍أرسل موقعك المباشر (Live Location) للمنسق.*
-*3- 🔄 سيتم تعيين الكابتن الأقرب بعد 30 ثانية.*
-
-*HIGHWAY Delivery | أسرع طريق لطلباتك 🩵.*`;
-
-    openWhatsApp(message);
-    const pst = state.pickup.sid ? HWDB.col('storestate').get(state.pickup.sid) || {} : {}, psd = state.pickup.sid ? HWBiz.storeById(state.pickup.sid) || {} : {};
-    HWOrders.create({ source: 'coordinator', storeId: state.pickup.sid || '', storeName: pickupName, kind: 'pickup', from: pickupName, to: '',
-        storeLoc: pst.lat != null ? { lat: pst.lat, lng: pst.lng } : null, storePhone: psd.phone || '', storeAddr: psd.addr || '',
-        price: '', orderNo: orderNumber, code: '#' + orderNumber.slice(0, 8), orderValue: orderValue, notes: notes === 'لا يوجد' ? '' : notes });
-    setBtnLoading(btn, false);
-
-    document.getElementById('successSub').textContent = 'تم فتح واتساب لمشاركة تفاصيل الطلب الجديد.';
-    const ref = document.getElementById('successRef');
-    ref.textContent = `رقم الطلب #${orderNumber}`;
-    ref.style.display = 'inline-block';
-    goTo('screen-success');
-  }, 550);
+  const notes = document.getElementById('orderNotes').value.trim();
+  const pst = state.pickup.sid ? HWDB.col('storestate').get(state.pickup.sid) || {} : {}, psd = state.pickup.sid ? HWBiz.storeById(state.pickup.sid) || {} : {};
+  HWOrders.create({ source: 'coordinator', storeId: state.pickup.sid || '', storeName: pickupName, kind: 'pickup', from: pickupName, to: '',
+      storeLoc: pst.lat != null ? { lat: pst.lat, lng: pst.lng } : null, storePhone: psd.phone || '', storeAddr: psd.addr || '',
+      price: '', orderNo: orderNumber, orderValue: orderValue, notes: notes });
+  setBtnLoading(btn, false);
+  HWOrders.toast('دخل الطلب للنظام ويُعرض الآن على أقرب كابتن');
+  resetAndGo('screen-board');
 });
-
-/* ---------- نموذج تأكيد الاستلام ---------- */
-document.getElementById('confirmForm').addEventListener('submit', function(e){
-  e.preventDefault();
-  let valid = true;
-
-  const captainName = document.getElementById('captainName').value.trim();
-  setInvalid('captainNameField', !captainName);
-  if (!captainName) valid = false;
-
-  const arrivalTime = document.getElementById('arrivalTime').value;
-  setInvalid('arrivalTimeField', !arrivalTime);
-  if (!arrivalTime) valid = false;
-
-  const phone = parsePhone(document.getElementById('captainPhone').value);
-  setInvalid('captainPhoneField', !phone.ok);
-  if (!phone.ok) valid = false;
-
-  const orderSuffix = document.getElementById('confirmOrderNumber').value.trim();
-  setInvalid('confirmOrderNumField', !orderSuffix);
-  if (!orderSuffix) valid = false;
-
-  if (!valid) return;
-
-  const btn = document.getElementById('confirmSubmitBtn');
-  setBtnLoading(btn, true);
-
-  setTimeout(() => {
-    const fullOrderNumber = `ORD#${getDatePrefix()}-${orderSuffix}`;
-    const phoneLine = phone.empty ? '' : `\n📞 رقم الكابتن: *\u200E${phone.value}*`;
-
-    const message =
-`📢 تنبيه: الكابتن في الطريق إليكم!
-
-تم إسناد الطلب للكابتن *${captainName}*${phoneLine}
-الآن في طريقه لإستلام الطلب رقم *${fullOrderNumber}*
-⏰ وقت الوصول المتوقع: *${formatTime12h(arrivalTime)}*
-
-شكراً لكم على سرعة التجاوب واحترافيتكم العالية 🩵
-HIGHWAY Delivery | The Fastest Way to Your Orders`;
-
-    openWhatsApp(message);
-    const key = orderSuffix.toLowerCase();
-    const found = allOrders.filter(o => HWOrders.isActive(o) && (String(o.orderNo || '').toLowerCase() === key || String(o.code).toLowerCase() === '#' + key))[0];
-    const cap = { name: captainName, phone: phone.value };
-    if (found) HWOrders.update(found.id, { status: found.status === 'new' ? 'accepted' : found.status, captain: cap, eta: formatTime12h(arrivalTime) });
-    else {
-        const n = HWOrders.create({ source: 'coordinator', storeId: '', storeName: '—', kind: 'pickup', from: 'طلب رقم ' + orderSuffix, to: '', price: '', orderNo: orderSuffix, code: '#' + orderSuffix.slice(0, 8) });
-        HWOrders.update(n.id, { status: 'accepted', captain: cap, eta: formatTime12h(arrivalTime) });
-    }
-    setBtnLoading(btn, false);
-
-    document.getElementById('successSub').textContent = 'تم فتح واتساب لتأكيد استلام الطلب مع الكابتن.';
-    const ref = document.getElementById('successRef');
-    ref.textContent = fullOrderNumber;
-    ref.style.display = 'inline-block';
-    goTo('screen-success');
-  }, 550);
-});
-
-
 
 try { if ("scrollRestoration" in history) history.scrollRestoration = "manual"; } catch (e) {}
 window.addEventListener("pageshow", () => window.scrollTo(0, 0));
-document.addEventListener("click", (e) => { if (!e.target.closest("#userWrap")) closeUserMenu(); });
 
 /* ---------- تشغيل ---------- */
 (function init(){
   buildSplashIcons();
   HWBiz.storesCol.subscribe(renderRestaurants); HWBiz.onMedia(renderRestaurants);
-  document.getElementById('orderPrefixTag').textContent = `ORD#${getDatePrefix()}-`;
 
   let skipSplash = false;
   try { skipSplash = sessionStorage.getItem('hw-skip-splash') === '1'; sessionStorage.removeItem('hw-skip-splash'); } catch (e) {}
@@ -568,7 +469,7 @@ document.addEventListener("click", (e) => { if (!e.target.closest("#userWrap")) 
   window.addEventListener('pageshow', (e) => { if (e.persisted) location.reload(); });
   window.addEventListener('storage', (e) => { if (e.key === SESSION_KEY) location.reload(); });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { closeOrderSheet(); closeAssign(); closeUserMenu(); if (splash.classList.contains('login-mode') && !splash.classList.contains('hide')) closeLogin(); }
+    if (e.key === 'Escape') { closeOrderSheet(); closeAssign(); if (splash.classList.contains('login-mode') && !splash.classList.contains('hide')) closeLogin(); }
   });
 
   goTo('screen-dashboard');
@@ -695,29 +596,20 @@ document.getElementById('asName').addEventListener('input', (e) => {
     const book = captainBook(), ph = document.getElementById('asPhone');
     if (e.target.value in book && !ph.value) ph.value = book[e.target.value];
 });
-document.getElementById('assignForm').addEventListener('submit', (e) => { e.preventDefault(); submitAssign(false); });
+document.getElementById('assignForm').addEventListener('submit', (e) => { e.preventDefault(); submitAssign(); });
 function defaultEta() { const d = new Date(Date.now() + 20 * 60000); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
-function submitAssign(wa) {
+function submitAssign() {
     const o = HWOrders.get(assignId); if (!o) return;
     const name = document.getElementById('asName').value.trim(), eta = document.getElementById('asEta').value || defaultEta(), phone = parsePhone(document.getElementById('asPhone').value);
     const changing = o.captain && o.captain.name && o.captain.name !== name, reason = changing ? document.getElementById('asReason').value : '';
     setInvalid('asNameField', !name); setInvalid('asPhoneField', !phone.ok); setInvalid('asReasonField', changing && !reason);
     if (!name || !phone.ok || (changing && !reason)) return;
     const cd = HWDB.col('captains').list().filter(c => c.name === name)[0];
-    const patch = { captain: Object.assign({ name: name, phone: phone.value }, cd ? { id: cd.id, av: cd.av === 'f' ? 'f' : 'm', pv: cd.pv || 0 } : {}), eta: formatTime12h(eta), claimBy: cd ? cd.id : null, offerTo: null, offerAt: 0 };
+    const patch = { captain: Object.assign({ name: name, phone: phone.value }, cd ? { id: cd.id, num: cd.num || '', av: cd.av === 'f' ? 'f' : 'm', pv: cd.pv || 0 } : {}), eta: formatTime12h(eta), claimBy: cd ? cd.id : null, offerTo: null, offerAt: 0 };
     if (o.status === 'new') patch.status = 'accepted';
     if (changing) patch.reassigns = (o.reassigns || []).concat([{ from: o.captain.name, to: name, reason, at: Date.now(), by: actorName() }]);
     HWOrders.update(o.id, patch, changing ? 'reassigned' : null);
     logAct(changing ? 'reassign' : 'assign', (changing ? 'نقل الطلب ' + o.code + ' من ' + o.captain.name + ' إلى ' + name + ' — ' + reason : 'إسناد الطلب ' + o.code + ' إلى ' + name));
-    if (wa) {
-        openWhatsApp(`📢 تنبيه: الكابتن في الطريق إليكم!
-
-تم إسناد الطلب *${o.code}* للكابتن *${name}*${phone.empty ? '' : '\n📞 رقم الكابتن: *\u200E' + phone.value + '*'}
-⏰ وقت الوصول المتوقع: *${formatTime12h(eta)}*
-
-شكراً لكم على سرعة التجاوب واحترافيتكم العالية 🩵
-HIGHWAY Delivery | The Fastest Way to Your Orders`);
-    }
     closeAssign(); buzz(18); HWOrders.toast('تم تعيين الكابتن ' + name + ' للطلب ' + o.code);
 }
 

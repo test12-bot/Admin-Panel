@@ -92,8 +92,27 @@ function needsAttention() {
         ns && ['', ns + ' لم يستلم اليوم', 'سجل العملاء', "mgTab='customers';tabGo('screen-manage')"]
     ].filter(Boolean);
 }
+/* قائمة البداية: تظهر حتى تكتمل خطوات تجهيز المنصة، ثم تختفي تلقائيًا */
+function setupSteps() {
+    const stores = HWBiz.storeList(), caps = capsCol.list();
+    const located = stores.length && stCol.loaded() && stores.every(x => (stCol.get(x.id) || {}).lat != null);
+    return [
+        [stores.length > 0, 'أضف أول متجر', 'الاسم والشعار وحساب الدخول', "mgTab='stores';tabGo('screen-manage')"],
+        [!!located, 'حدّد موقع كل متجر على الخريطة', 'حتى يراه العملاء ويصله الكباتن', "mgTab='stores';tabGo('screen-manage')"],
+        [stores.some(x => (HWDB.col('menus').get(x.id) || { cats: [] }).cats.some(c => (c.items || []).length)), 'جهّز منيو متجر واحد على الأقل', 'الأصناف والأسعار والصور', "mgTab='stores';tabGo('screen-manage')"],
+        [caps.length > 0, 'أضف أول كابتن', 'رقم الهاتف والرمز السري', "tabGo('screen-captains')"],
+        [allOrders.length > 0, 'استقبل أول طلب', 'من تطبيق العميل أو المتجر أو طلب يدوي', "goTo('screen-restaurants')"]
+    ];
+}
+function setupHtml() {
+    const st = setupSteps(), done = st.filter(x => x[0]).length;
+    if (done === st.length) return '';
+    return '<div class="setup"><div class="setup-h"><b>جهّز منصتك</b><span>' + done + ' من ' + st.length + '</span></div><div class="setup-bar"><i style="width:' + Math.round(done / st.length * 100) + '%"></i></div>' +
+        st.map(x => '<button type="button" class="setup-s' + (x[0] ? ' ok' : '') + '"' + (x[0] ? ' disabled' : ' onclick="' + x[3] + '"') + '><i>' + (x[0] ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>' : '') + '</i><span><b>' + x[1] + '</b><small>' + x[2] + '</small></span></button>').join('') + '</div>';
+}
 function needHtml() {
-    const l = needsAttention();
+    const l = needsAttention(), setup = setupHtml();
+    if (setup) return setup + (l.length ? '<div class="need"><b class="need-h">يحتاج تدخلك</b><div class="need-row">' + l.map(x => '<button type="button" class="need-c ' + x[0] + '" onclick="' + x[3] + '"><b>' + x[1] + '</b><small>' + AE(x[2]) + '</small></button>').join('') + '</div></div>' : '');
     if (!l.length) return '<div class="need ok"><span class="need-ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><b>كل شيء يسير كما يجب</b></div>';
     return '<div class="need"><b class="need-h">يحتاج تدخلك</b><div class="need-row">' + l.map(x => '<button type="button" class="need-c ' + x[0] + '" onclick="' + x[3] + '"><b>' + x[1] + '</b><small>' + AE(x[2]) + '</small></button>').join('') + '</div></div>';
 }
@@ -123,6 +142,7 @@ function storeQuality() {
 function renderKpis() {
     const box = A$('kpiBox'); if (!box) return;
     const k = kpis(HWBiz.periodStart('day')), y = kpisYesterday(), live = capsCol.list().filter(isLive).length, open = issuesCol.list().filter(i => i.status !== 'resolved').length;
+    if (!allOrders.length) { box.innerHTML = needHtml(); return; }   /* اليوم الأول: قائمة البداية فقط بدل بطاقات أصفار */
     box.innerHTML = needHtml() + '<div class="kpi-grid">' +
         '<div class="kpi hot" data-stat="k-n"><small>طلبات اليوم</small><b>' + k.n + '</b><em>' + k.done + ' مسلّمة</em>' + delta(k.n, y.n) + '</div>' +
         '<div class="kpi" data-stat="k-min"><small>متوسط وقت التوصيل</small><b>' + (k.avgMin || '—') + '</b><em>دقيقة</em></div>' +
