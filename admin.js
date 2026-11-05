@@ -160,14 +160,16 @@ let opsMap = null, opsLayer = null, opsSig = '';
 function renderOpsMap() {
     const el = A$('opsMapEl'); if (!el || !window.L || scr() !== 'screen-dashboard') return;
     if (!opsMap) { opsMap = HWMap.create(el, { center: HWMap.center(), zoom: 12 }); opsLayer = L.layerGroup().addTo(opsMap); }
-    const caps = capsCol.list().filter(c => c.lat != null && isLive(c)), act = allOrders.filter(HWOrders.isActive);
+    /* الكابتن المتصل يبقى على الخريطة حتى لو انقطع موقعه (حتى 30 دقيقة)، بلون باهت مع "آخر موقع قبل" */
+    const locAge = c => Date.now() - (c.locAt || c.lastSeen || 0);
+    const caps = capsCol.list().filter(c => c.lat != null && c.active !== false && c.online && locAge(c) < 30 * 60000), act = allOrders.filter(HWOrders.isActive);
     const stores = storePins();
-    const sig = caps.map(c => c.id + c.lat + c.lng).join() + '|' + act.map(o => o.id + o.status).join() + '|' + stores.map(x => x.id + x.p).join();
+    const sig = caps.map(c => c.id + c.lat + c.lng + (locAge(c) > 90000 ? 'o' + Math.round(locAge(c) / 60000) : '')).join() + '|' + act.map(o => o.id + o.status).join() + '|' + stores.map(x => x.id + x.p).join();
     if (sig === opsSig) return; opsSig = sig; opsLayer.clearLayers(); const pts = [];
     /* حالة طلبات كل متجر تظهر على إطار شعاره: أحمر بانتظار كابتن، فيروزي الكابتن في الطريق للمتجر، داكن في الطريق للعميل */
     const stOf = storeStates(act);
     stores.forEach(x => { pts.push(x.p); L.marker(x.p, { icon: HWMap.ICON.store(x.id, stOf[x.id]), zIndexOffset: stOf[x.id] ? 300 : 100 }).bindTooltip(x.name, { direction: 'top' }).on('click', () => focusStore(x.id)).addTo(opsLayer); });
-    caps.forEach(c => { const p = [c.lat, c.lng]; pts.push(p); L.marker(p, { icon: HWMap.ICON.cap(), zIndexOffset: 400 }).bindTooltip(c.name, { direction: 'top' }).addTo(opsLayer); });
+    caps.forEach(c => { const p = [c.lat, c.lng], old = locAge(c) > 90000; pts.push(p); L.marker(p, { opacity: old ? .45 : 1, icon: HWMap.ICON.cap(), zIndexOffset: 400 }).bindTooltip(c.name + (old ? ' · آخر موقع قبل ' + Math.round(locAge(c) / 60000) + ' د' : ''), { direction: 'top', permanent: old }).addTo(opsLayer); });
     const COLOR = { n: '#EF0000', a: '#25CED1', p: '#0E3A3B' }, pinned = {}; stores.forEach(x => { pinned[x.id] = 1; });
     act.forEach(o => {
         const k = o.status === 'new' ? 'n' : o.status === 'accepted' ? 'a' : 'p';
@@ -261,7 +263,7 @@ document.addEventListener('click', (e) => {
 });
 setInterval(() => { if (!document.hidden && scr() === 'screen-dashboard') renderLive(); }, 20000);
 /* الضغط على شعار متجر في الخريطة: طلباته الجارية فقط */
-function focusStore(id) { liveStore = id; renderLive(); const b = A$('liveBox'); if (b) window.scrollTo({ top: b.getBoundingClientRect().top + window.scrollY - 140, behavior: 'smooth' }); }
+function focusStore(id) { liveStore = id; renderLive(); if (window.opsSheet) opsSheet(1); const sh = document.querySelector('#screen-dashboard .mp-sheet'); if (sh) sh.scrollTo({ top: 0, behavior: 'smooth' }); }
 
 /* =========================================================
    3) تسوية الكباتن
@@ -569,3 +571,47 @@ function backfillKeys() {
     });
 }
 setTimeout(() => { dailyUpkeep(); backfillKeys(); }, 8000);
+
+/* =========================================================
+   بطاقة العمليات تُسحب فوق الخريطة: شريط صغير ← نصف الشاشة ← كاملة
+   (السحب من المقبض أو من عنوان "العمليات الآن"، والضغط على المقبض يبدّل)
+   ========================================================= */
+(function () {
+    const KEY = 'hw-ops-sheet', root = document.documentElement;
+    const snaps = () => { const vh = window.innerHeight, hh = parseInt(getComputedStyle(root).getPropertyValue('--hdr-h'), 10) || 70; return [220, Math.round(vh * .5), vh - hh - 12]; };
+    let level = 1; try { level = +localStorage.getItem(KEY) || 1; } catch (e) {}
+    const sheet = () => document.querySelector('#screen-dashboard .mp-sheet');
+    function apply(px, save) {
+        const s = snaps(); px = Math.max(s[0] - 40, Math.min(s[2], px));
+        root.style.setProperty('--dsh', px + 'px'); root.style.setProperty('--map-bottom', px + 'px');
+        if (save !== undefined) { level = save; try { localStorage.setItem(KEY, save); } catch (e) {} }
+    }
+    function snapTo(i) { i = Math.max(0, Math.min(2, i)); apply(snaps()[i], i); refit(); }
+    function refit() { setTimeout(() => { if (typeof opsMap !== 'undefined' && opsMap) { opsMap.invalidateSize(); opsSig = ''; renderOpsMap(); } }, 340); }
+    let y0 = 0, h0 = 0, t0 = 0, moved = false, on = false;
+    function start(e) {
+        const sh = sheet(); if (!sh) return;
+        const p = e.touches ? e.touches[0] : e; y0 = p.clientY; h0 = sh.getBoundingClientRect().height; t0 = Date.now(); moved = false; on = true; sh.classList.add('dragging');
+    }
+    function move(e) {
+        if (!on) return; const p = e.touches ? e.touches[0] : e, dy = p.clientY - y0;
+        if (Math.abs(dy) > 4) moved = true; if (!moved) return;
+        if (e.cancelable) e.preventDefault(); apply(h0 - dy);
+    }
+    function end(e) {
+        if (!on) return; on = false; const sh = sheet(); if (sh) sh.classList.remove('dragging');
+        const p = e.changedTouches ? e.changedTouches[0] : e, dy = p.clientY - y0, v = dy / Math.max(1, Date.now() - t0);
+        if (!moved) { if (e.target.closest && e.target.closest('.mp-grab')) snapTo(level === 0 ? 1 : level === 1 ? 2 : 0); return; }
+        const h = h0 - dy, s = snaps();
+        let i = s.reduce((b, x, k) => Math.abs(x - h) < Math.abs(s[b] - h) ? k : b, 0);
+        if (v > .6) i = Math.max(0, level - 1); else if (v < -.6) i = Math.min(2, level + 1);   /* سحب سريع */
+        snapTo(i);
+    }
+    document.addEventListener('touchstart', e => { if (e.target.closest && e.target.closest('#screen-dashboard .mp-grab, #screen-dashboard .ops-head') && !e.target.closest('button')) start(e); }, { passive: true });
+    document.addEventListener('mousedown', e => { if (e.target.closest && e.target.closest('#screen-dashboard .mp-grab, #screen-dashboard .ops-head') && !e.target.closest('button')) start(e); });
+    document.addEventListener('touchmove', move, { passive: false }); document.addEventListener('mousemove', move);
+    document.addEventListener('touchend', end); document.addEventListener('mouseup', end);
+    window.addEventListener('resize', () => apply(snaps()[level]));
+    apply(snaps()[level]);
+    window.opsSheet = snapTo;
+})();

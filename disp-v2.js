@@ -170,7 +170,8 @@ function renderCapMap() {
     capLayer.clearLayers(); const pts = [];
     const stOf = storeStates(allOrders.filter(HWOrders.isActive));
     storePins().forEach(x => { pts.push(x.p); L.marker(x.p, { icon: HWMap.ICON.store(x.id, stOf[x.id]), zIndexOffset: stOf[x.id] ? 300 : 100 }).bindTooltip(x.name, { direction: 'top' }).addTo(capLayer); });
-    capsCol.list().filter(c => c.lat != null && isLive(c)).forEach(c => { const p = [c.lat, c.lng]; pts.push(p); L.marker(p, { icon: HWMap.ICON.cap(), zIndexOffset: 400 }).bindTooltip(c.name, { direction: 'top' }).addTo(capLayer); });
+    const age = c => Date.now() - (c.locAt || c.lastSeen || 0);
+    capsCol.list().filter(c => c.lat != null && c.active !== false && c.online && age(c) < 30 * 60000).forEach(c => { const p = [c.lat, c.lng], old = age(c) > 90000; pts.push(p); L.marker(p, { icon: HWMap.ICON.cap(), opacity: old ? .45 : 1, zIndexOffset: 400 }).bindTooltip(c.name + (old ? ' · آخر موقع قبل ' + Math.round(age(c) / 60000) + ' د' : ''), { direction: 'top' }).addTo(capLayer); });
     allOrders.filter(HWOrders.isActive).forEach(o => { if (o.address && o.address.lat != null) { const p = [o.address.lat, o.address.lng]; pts.push(p); L.marker(p, { icon: HWMap.ICON.home() }).bindTooltip(o.code, { direction: 'top' }).addTo(capLayer); } if (o.storeLoc) { pts.push([o.storeLoc.lat, o.storeLoc.lng]); } });
     capMap.invalidateSize(); if (pts.length) HWMap.fit(capMap, pts, HWMap.mpPad());
 }
