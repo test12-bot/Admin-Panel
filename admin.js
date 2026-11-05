@@ -243,7 +243,9 @@ function renderLive() {
     STAGES.forEach(st => {
         const l = HWOrders.prioritySort(act.filter(st.f));
         if (!l.length) return;
-        h += '<div class="lv-g ' + st.k + '"><div class="lv-gh"><i></i>' + st.t + '<em>' + l.length + '</em></div>' + l.map(o => liveCard(o, st)).join('') + '</div>';
+        const show = l.slice(0, 25);   /* وقت الذروة: أول 25 في كل مرحلة (الأهم أولًا)، والباقي في صفحة الطلبات */
+        h += '<div class="lv-g ' + st.k + '"><div class="lv-gh"><i></i>' + st.t + '<em>' + l.length + '</em></div>' + show.map(o => liveCard(o, st)).join('') +
+            (l.length > show.length ? '<button type="button" class="lv-more" onclick="tabGo(\'screen-board\')">و' + (l.length - show.length) + ' طلبات أخرى في صفحة الطلبات</button>' : '') + '</div>';
     });
     if (!act.length && !q) h += '<div class="lv-empty">لا توجد طلبات جارية الآن' + (free ? ' · ' + free + ' كابتن بانتظار الطلبات' : '') + '</div>';
     if (q && !act.length && !found.length) h += '<div class="lv-empty">لا يوجد طلب بهذا الرقم أو الاسم اليوم</div>';
