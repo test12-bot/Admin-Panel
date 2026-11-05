@@ -82,7 +82,9 @@ function needsAttention() {
     const lim = capsCol.list().filter(c => c.overLimit && c.active !== false);
     const ns = allOrders.filter(o => o.noShow && HWOrders.isToday(o.updatedAt || o.createdAt)).length;
     const noLoc = stCol.loaded() ? HWBiz.storeList().filter(x => (stCol.get(x.id) || {}).lat == null) : [];
+    const unp = typeof unpricedList === 'function' ? unpricedList() : [];
     return [
+        unp.length && ['y', (unp.length === 1 ? 'طلب واحد' : unp.length + ' طلبات') + ' بلا أجرة توصيل', 'اضغط لتسعيره' + (unp.length > 1 ? 'ا واحدًا تلو الآخر' : ''), 'openPricing()'],
         pend.length && ['r', pend.length + ' بانتظار قبول المتجر', 'أكثر من 3 دقائق', "goTo('screen-board')"],
         noCap.length && ['r', noCap.length + ' بلا كابتن', 'أكثر من 5 دقائق', "goTo('screen-board')"],
         late.length && ['y', late.length + ' متأخر', 'تجاوز الوقت المتوقع', "goTo('screen-board')"],
@@ -202,6 +204,8 @@ function settleCaptain(cid) {
     if (!l.length || !confirm((t.due >= 0 ? 'استلمت من ' : 'دفعت لـ ') + c.name + ' مبلغ ' + AM(Math.abs(t.due)) + ' د.أ عن ' + l.length + ' طلب؟')) return;
     const at = Date.now(), by = actorName();
     l.forEach(o => HWOrders.update(o.id, { settledAt: at, settledBy: by }, 'settled'));
+    /* سجل دائم للتسوية: الطلبات تبقى كما هي، وحساب الكابتن الحالي يبدأ من الصفر */
+    HWDB.col('settlements').create({ id: 'st' + at.toString(36), capId: cid, capName: c.name || '', capNum: c.num || '', at, by, n: l.length, fee: HWBiz.r2(t.fee), commission: HWBiz.r2(t.com), promo: HWBiz.r2(t.promo), due: HWBiz.r2(t.due), orders: l.map(o => o.code || o.id) });
     logAct('settle', 'تسوية ' + c.name + ': ' + l.length + ' طلب · ' + (t.due >= 0 ? 'استلام ' : 'دفع ') + AM(Math.abs(t.due)) + ' د.أ');
     closeCapSheet(); buzz(20); HWOrders.toast('تم تسجيل التسوية');
 }

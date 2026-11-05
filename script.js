@@ -426,6 +426,10 @@ document.getElementById('orderForm').addEventListener('submit', function(e){
   setInvalid('orderValueField', !orderValue);
   if (!orderValue) valid = false;
 
+  const feeRaw = document.getElementById('orderFee').value.trim(), fee = parseFee(feeRaw);
+  setInvalid('orderFeeField', feeRaw !== '' && fee == null);
+  if (feeRaw !== '' && fee == null) valid = false;
+
   if (!valid) return;
 
   const btn = document.getElementById('orderSubmitBtn');
@@ -435,9 +439,9 @@ document.getElementById('orderForm').addEventListener('submit', function(e){
   const pst = state.pickup.sid ? HWDB.col('storestate').get(state.pickup.sid) || {} : {}, psd = state.pickup.sid ? HWBiz.storeById(state.pickup.sid) || {} : {};
   HWOrders.create({ source: 'coordinator', storeId: state.pickup.sid || '', storeName: pickupName, kind: 'pickup', from: pickupName, to: '',
       storeLoc: pst.lat != null ? { lat: pst.lat, lng: pst.lng } : null, storePhone: psd.phone || '', storeAddr: psd.addr || '',
-      price: '', orderNo: orderNumber, orderValue: orderValue, notes: notes });
+      price: fee == null ? '' : fee.toFixed(2), unpriced: fee == null, orderNo: orderNumber, orderValue: orderValue, notes: notes });
   setBtnLoading(btn, false);
-  HWOrders.toast('دخل الطلب للنظام ويُعرض الآن على أقرب كابتن');
+  HWOrders.toast(fee == null ? 'دخل الطلب للنظام. لا تنسَ تحديد أجرة التوصيل' : 'دخل الطلب للنظام ويُعرض الآن على أقرب كابتن');
   resetAndGo('screen-board');
 });
 
@@ -448,6 +452,7 @@ window.addEventListener("pageshow", () => window.scrollTo(0, 0));
 (function init(){
   buildSplashIcons();
   HWBiz.storesCol.subscribe(renderRestaurants); HWBiz.onMedia(renderRestaurants);
+  setTimeout(() => { document.getElementById('feeQuick').innerHTML = feeChips('orderFee'); });
 
   let skipSplash = false;
   try { skipSplash = sessionStorage.getItem('hw-skip-splash') === '1'; sessionStorage.removeItem('hw-skip-splash'); } catch (e) {}
@@ -491,8 +496,40 @@ function buzz(ms) { try { if (navigator.vibrate) navigator.vibrate(ms || 8); } c
 function tabGo(id) { buzz(); goTo(id); }
 const iconBox = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>';
 
+/* ---------- أجور التوصيل: تُحدد مع الطلب أو لاحقًا (قبل تسوية حساب الكابتن) ---------- */
+const FEE_PRESETS = [1.5, 2, 2.5, 3, 3.5];
+function parseFee(v) { const n = parseFloat(String(v).replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(',', '.')); return isFinite(n) && n >= 0 && n <= 50 ? Math.round(n * 100) / 100 : null; }
+function needsFee(o) { return !HWOrders.isMarket(o) && o.status !== 'cancelled' && !o.settledAt && !(HWOrders.settle(o).fee > 0); }
+function unpricedList() { return allOrders.filter(needsFee).sort((a, b) => a.createdAt - b.createdAt); }
+function feeChips(target) { return FEE_PRESETS.map(v => '<button type="button" class="fq" onclick="document.getElementById(\'' + target + '\').value=\'' + v.toFixed(2) + '\'">' + v.toFixed(2) + '</button>').join(''); }
+function openFee(id) {
+    const o = HWOrders.get(id); if (!o) return;
+    const cur = HWOrders.settle(o).fee, body = document.getElementById('orderSheetBody');
+    openSheetId = null;
+    body.className = 'modal-card glass';
+    body.innerHTML = '<div class="sh-head"><div><small>' + HWOrders.esc(o.code) + ' · ' + HWOrders.esc(o.storeName || o.from || '') + '</small><h3>أجور التوصيل</h3></div></div>' +
+        (o.captain && o.captain.name ? '<p class="mut" style="margin:0 0 10px">الكابتن ' + HWOrders.esc(o.captain.name) + ' · تظهر الأجرة في أرباحه فور الحفظ</p>' : '') +
+        '<div class="field" id="feeEdField"><label for="feeEd">المبلغ</label><div class="value-wrap"><input type="text" id="feeEd" inputmode="decimal" value="' + (cur > 0 ? cur.toFixed(2) : '') + '" placeholder="مثال: 2.00"><span class="cur">د.أ</span></div>' +
+        '<div class="fee-quick">' + feeChips('feeEd') + '</div><div class="err-msg">اكتب رقمًا صحيحًا مثل 2 أو 2.50</div></div>' +
+        '<div class="sh-actions"><button type="button" class="ghost-btn" style="flex:1" onclick="closeOrderSheet()">لاحقًا</button><button type="button" class="submit-btn" style="flex:2" onclick="saveFee(\'' + o.id + '\')"><span class="btn-label">حفظ الأجرة</span></button></div>';
+    document.getElementById('orderSheet').classList.add('show');
+    setTimeout(() => { const i = document.getElementById('feeEd'); if (i && matchMedia('(hover:hover)').matches) i.focus(); }, 300);
+}
+function saveFee(id) {
+    const o = HWOrders.get(id), v = parseFee(document.getElementById('feeEd').value);
+    setInvalid('feeEdField', v == null || v <= 0); if (!o || v == null || v <= 0) return;
+    HWOrders.update(id, { price: v.toFixed(2), unpriced: false, pricedBy: actorName(), pricedAt: Date.now() }, 'priced');
+    logAct('price', 'أجرة الطلب ' + o.code + ': ' + v.toFixed(2) + ' د.أ');
+    buzz(15); HWOrders.toast('تم حفظ أجرة ' + o.code);
+    const next = unpricedList()[0];
+    if (next) setTimeout(() => openFee(next.id), 250); else closeOrderSheet();
+}
+function openPricing() { const l = unpricedList(); if (l.length) openFee(l[0].id); }
 function actionsFor(o) {
-    const id = HWOrders.esc(o.id);
+    const id = HWOrders.esc(o.id), fb = needsFee(o) ? '<button type="button" class="btn-s warn" data-act="fee" data-id="' + id + '">حدّد الأجرة</button>' : '';
+    const a = actionsFor0(o, id); return fb + a;
+}
+function actionsFor0(o, id) {
     if (o.status === 'new') return '<button type="button" class="btn-s" data-act="assign" data-id="' + id + '">تعيين كابتن</button><button type="button" class="btn-s dng" data-act="cancel" data-id="' + id + '">إلغاء</button>';
     if (o.status === 'accepted') return '<button type="button" class="btn-s" data-act="picked" data-id="' + id + '">تم الاستلام من المتجر</button><button type="button" class="btn-s alt" data-act="assign" data-id="' + id + '">تغيير الكابتن</button>';
     if (o.status === 'picked') return '<button type="button" class="btn-s" data-act="delivered" data-id="' + id + '">تم التسليم</button>';
@@ -617,6 +654,7 @@ function submitAssign() {
 function orderAct(act, id) {
     const o = HWOrders.get(id); if (!o) return;
     if (act === 'assign') return openAssign(id);
+    if (act === 'fee') return openFee(id);
     if (act === 'cancel') {
         const why = prompt('سبب إلغاء الطلب ' + o.code + ':', 'طلب العميل'); if (why === null) return;
         HWOrders.update(id, { status: 'cancelled', cancelReason: 'ألغت الإدارة الطلب' + (why ? ' (' + why + ')' : '') }); logAct('cancel', 'إلغاء الطلب ' + o.code + (why ? ' — ' + why : '')); HWOrders.toast('تم إلغاء الطلب'); return;
