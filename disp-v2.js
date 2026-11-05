@@ -54,6 +54,7 @@ function openCapSheet(id) {
     document.getElementById('capSheetBody').innerHTML = '<div class="sh-head"><div><small>الكباتن</small><h3>' + (id ? 'تعديل كابتن' : 'كابتن جديد') + '</h3></div></div>' +
         (id ? '<button type="button" class="cap-av-ed" onclick="capPhotoMenu()" aria-label="صورة الكابتن"><img class="pf-av" src="' + CH(HWBiz.capAv(c)) + '" alt=""><i class="ed-pen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></svg></i></button>' : '') +
         (id ? '<p class="cap-no-l">رقم الكابتن <b dir="ltr">' + CH(c.num || '—') + '</b></p>' : '') +
+        (id && c.active === false ? '<p class="ip-warn">الحساب موقوف' + (c.suspendReason ? ' · ' + CH(c.suspendReason) : '') + '</p>' : '') +
         '<div class="field"><label for="cpName">الاسم</label><input type="text" id="cpName" value="' + CH(c.name) + '"></div>' +
         '<div class="field"><label for="cpPhone">رقم الهاتف</label><input type="tel" id="cpPhone" dir="ltr" inputmode="tel" value="' + CH(c.phone) + '" placeholder="07XXXXXXXX"></div>' +
         '<div class="field"><label for="cpPin">الرمز السري ' + (id ? '<span class="opt">(اتركه فارغًا لعدم التغيير)</span>' : '') + '</label><input type="text" id="cpPin" inputmode="numeric" dir="ltr" placeholder="4 أرقام على الأقل"></div>' +
@@ -96,7 +97,24 @@ async function saveCap() {
     else { const id = 'k' + Date.now().toString(36); capsCol.create(Object.assign({ id, active: true, online: false }, rec)); HWOrders.capNo().then(n => capsCol.patch(id, { num: n })).catch(() => {}); }
     closeCapSheet(); buzz(15); HWOrders.toast('تم حفظ الكابتن');
 }
-function toggleCapActive() { const c = capsCol.get(editCapId); capsCol.patch(editCapId, { active: c.active === false, online: false }); closeCapSheet(); }
+/* الإيقاف: لا يُخرج الكابتن من التطبيق؛ يتوقف عن استقبال الطلبات ويرى السبب ووسيلة التواصل مع الدعم */
+const SUSP_WHY = ['مراجعة الحساب', 'تسوية مالية متأخرة', 'شكاوى من العملاء', 'عدم الالتزام بالتعليمات', 'إجازة مؤقتة'];
+function toggleCapActive() {
+    const id = editCapId, c = capsCol.get(id); if (!c) return;
+    if (c.active === false) { capsCol.patch(id, { active: true, suspendReason: null, suspendedAt: 0 }); if (typeof logAct === 'function') logAct('team', 'تفعيل الكابتن ' + c.name); HWOrders.toast('تم تفعيل ' + c.name); closeCapSheet(); return; }
+    document.getElementById('capSheetBody').innerHTML = '<div class="sh-head"><div><small>' + CH(c.name) + '</small><h3>إيقاف الكابتن</h3></div></div>' +
+        '<p class="mut" style="margin:0 0 12px">يبقى داخل التطبيق لكن لا تصله طلبات جديدة، ويرى السبب ويستطيع مراسلة الدعم. طلبه الجاري (إن وجد) يكمله كالمعتاد.</p>' +
+        '<div class="why-chips">' + SUSP_WHY.map((w, i) => '<button type="button" class="why-c' + (i === 0 ? ' on' : '') + '" data-why="' + CH(w) + '">' + CH(w) + '</button>').join('') + '</div>' +
+        '<div class="field"><label for="spWhy">السبب الذي يراه الكابتن</label><input type="text" id="spWhy" value="' + CH(SUSP_WHY[0]) + '" maxlength="120"></div>' +
+        '<div class="btn-row"><button type="button" class="ghost-btn" onclick="openCapSheet(\'' + id + '\')">رجوع</button><button type="button" class="submit-btn dng-btn" onclick="doSuspend()"><span class="btn-label">إيقاف الحساب</span></button></div>';
+}
+function doSuspend() {
+    const id = editCapId, c = capsCol.get(id), why = (document.getElementById('spWhy').value || '').trim(); if (!c) return;
+    capsCol.patch(id, { active: false, online: false, suspendReason: why, suspendedAt: Date.now(), suspendedBy: typeof actorName === 'function' ? actorName() : 'admin' });
+    if (typeof logAct === 'function') logAct('team', 'إيقاف الكابتن ' + c.name + (why ? ' — ' + why : ''));
+    buzz(15); HWOrders.toast('تم إيقاف ' + c.name + '، يرى السبب في تطبيقه'); closeCapSheet();
+}
+document.addEventListener('click', e => { const w = e.target.closest('.why-c'); if (!w) return; document.querySelectorAll('.why-c').forEach(x => x.classList.toggle('on', x === w)); const i = document.getElementById('spWhy'); if (i) i.value = w.dataset.why; });
 function deleteCap() { if (confirm('حذف هذا الكابتن نهائيًا؟')) { capsCol.remove(editCapId); closeCapSheet(); } }
 document.addEventListener('click', (e) => {
     const sg = e.target.closest('#capSeg button'); if (sg) { capRange = sg.dataset.r; renderCaps(); return; }
@@ -164,16 +182,18 @@ document.addEventListener('click', (e) => {
     document.getElementById('asName').value = c.name; document.getElementById('asPhone').value = c.phone || '';
     submitAssign();
 });
+let capFitted = false;
 function renderCapMap() {
     const box = document.getElementById('capMapEl'); if (!box || !window.L) return;
     if (!capMap) { capMap = HWMap.create(box, { center: HWMap.center(), zoom: 12 }); capLayer = L.layerGroup().addTo(capMap); }
+    if (capMap._popup && capMap.hasLayer(capMap._popup)) return;   /* بطاقة مفتوحة: لا نعيد الرسم تحتها */
     capLayer.clearLayers(); const pts = [];
     const stOf = storeStates(allOrders.filter(HWOrders.isActive));
-    storePins().forEach(x => { pts.push(x.p); L.marker(x.p, { icon: HWMap.ICON.store(x.id, stOf[x.id]), zIndexOffset: stOf[x.id] ? 300 : 100 }).bindTooltip(x.name, { direction: 'top' }).addTo(capLayer); });
+    storePins().forEach(x => { pts.push(x.p); capPop(L.marker(x.p, { icon: HWMap.ICON.store(x.id, stOf[x.id]), zIndexOffset: stOf[x.id] ? 300 : 100 }), 's', x.id).addTo(capLayer); });
     const age = c => Date.now() - (c.locAt || c.lastSeen || 0);
-    capsCol.list().filter(c => c.lat != null && c.active !== false && c.online && age(c) < 30 * 60000).forEach(c => { const p = [c.lat, c.lng], old = age(c) > 90000; pts.push(p); L.marker(p, { icon: HWMap.ICON.cap(), opacity: old ? .45 : 1, zIndexOffset: 400 }).bindTooltip(c.name + (old ? ' · آخر موقع قبل ' + Math.round(age(c) / 60000) + ' د' : ''), { direction: 'top' }).addTo(capLayer); });
-    allOrders.filter(HWOrders.isActive).forEach(o => { if (o.address && o.address.lat != null) { const p = [o.address.lat, o.address.lng]; pts.push(p); L.marker(p, { icon: HWMap.ICON.home() }).bindTooltip(o.code, { direction: 'top' }).addTo(capLayer); } if (o.storeLoc) { pts.push([o.storeLoc.lat, o.storeLoc.lng]); } });
-    capMap.invalidateSize(); if (pts.length) HWMap.fit(capMap, pts, HWMap.mpPad());
+    capsCol.list().filter(c => c.lat != null && c.active !== false && c.online && age(c) < 30 * 60000).forEach(c => { const p = [c.lat, c.lng], old = age(c) > 90000; pts.push(p); capPop(L.marker(p, { icon: HWMap.ICON.cap(), opacity: old ? .5 : 1, zIndexOffset: 400 }), 'k', c.id).addTo(capLayer); });
+    allOrders.filter(HWOrders.isActive).forEach(o => { if (o.address && o.address.lat != null) { const p = [o.address.lat, o.address.lng]; pts.push(p); L.marker(p, { icon: HWMap.ICON.home() }).on('click', () => openOrderSheet(o.id)).addTo(capLayer); } if (o.storeLoc) { pts.push([o.storeLoc.lat, o.storeLoc.lng]); } });
+    if (!capFitted && pts.length) { capMap.invalidateSize(); HWMap.fit(capMap, pts, HWMap.mpPad()); capFitted = true; }
 }
 (function () { const _r = window.renderCaps; window.renderCaps = function () { _r(); renderCapMap(); }; })();
 renderAuto();

@@ -156,29 +156,138 @@ function renderKpis() {
         '<button type="button" class="kpi" onclick="tabGo(\'screen-captains\')"><small>كباتن متصلون</small><b>' + live + '</b><em>من ' + capsCol.list().length + '</em></button>' +
         '<button type="button" class="kpi' + (open ? ' warn' : '') + '" onclick="goTo(\'screen-issues\')"><small>بلاغات مفتوحة</small><b>' + open + '</b><em>اضغط للمراجعة</em></button></div>' + storeQuality();
 }
-let opsMap = null, opsLayer = null, opsSig = '';
+let opsMap = null, opsLayer = null, opsExtra = null, opsSig = '', opsFitted = false, opsMk = {}, opsPop = null;
+const locAge = c => Date.now() - (c.locAt || c.lastSeen || 0);
+/* =========================================================
+   خريطة العمليات: علامات ثابتة تتحرك بنعومة (لا تُمسح وتُرسم من جديد)،
+   والخريطة لا تقفز: تُضبط على الكل مرة واحدة، وبعدها زر "عرض الكل".
+   الضغط على كابتن أو متجر يفتح بطاقة صغيرة تنبثق من الدائرة بأهم ما يحتاجه المنسق.
+   ========================================================= */
 function renderOpsMap() {
     const el = A$('opsMapEl'); if (!el || !window.L || scr() !== 'screen-dashboard') return;
-    if (!opsMap) { opsMap = HWMap.create(el, { center: HWMap.center(), zoom: 12 }); opsLayer = L.layerGroup().addTo(opsMap); }
-    /* الكابتن المتصل يبقى على الخريطة حتى لو انقطع موقعه (حتى 30 دقيقة)، بلون باهت مع "آخر موقع قبل" */
-    const locAge = c => Date.now() - (c.locAt || c.lastSeen || 0);
+    if (!opsMap) {
+        opsMap = HWMap.create(el, { center: HWMap.center(), zoom: 12 }); opsLayer = L.layerGroup().addTo(opsMap); opsExtra = L.layerGroup().addTo(opsMap);
+        opsMap.on('popupclose', () => { opsPop = null; el.parentNode.classList.remove('pop-on'); }); opsMap.on('popupopen', () => el.parentNode.classList.add('pop-on'));
+    }
     const caps = capsCol.list().filter(c => c.lat != null && c.active !== false && c.online && locAge(c) < 30 * 60000), act = allOrders.filter(HWOrders.isActive);
-    const stores = storePins();
-    const sig = caps.map(c => c.id + c.lat + c.lng + (locAge(c) > 90000 ? 'o' + Math.round(locAge(c) / 60000) : '')).join() + '|' + act.map(o => o.id + o.status).join() + '|' + stores.map(x => x.id + x.p).join();
-    if (sig === opsSig) return; opsSig = sig; opsLayer.clearLayers(); const pts = [];
-    /* حالة طلبات كل متجر تظهر على إطار شعاره: أحمر بانتظار كابتن، فيروزي الكابتن في الطريق للمتجر، داكن في الطريق للعميل */
-    const stOf = storeStates(act);
-    stores.forEach(x => { pts.push(x.p); L.marker(x.p, { icon: HWMap.ICON.store(x.id, stOf[x.id]), zIndexOffset: stOf[x.id] ? 300 : 100 }).bindTooltip(x.name, { direction: 'top' }).on('click', () => focusStore(x.id)).addTo(opsLayer); });
-    caps.forEach(c => { const p = [c.lat, c.lng], old = locAge(c) > 90000; pts.push(p); L.marker(p, { opacity: old ? .45 : 1, icon: HWMap.ICON.cap(), zIndexOffset: 400 }).bindTooltip(c.name + (old ? ' · آخر موقع قبل ' + Math.round(locAge(c) / 60000) + ' د' : ''), { direction: 'top', permanent: old }).addTo(opsLayer); });
+    const stores = storePins(), stOf = storeStates(act);
+    const sig = caps.map(c => c.id + c.lat + c.lng + (locAge(c) > 90000 ? 'o' : '')).join() + '|' + act.map(o => o.id + o.status).join() + '|' + stores.map(x => x.id + x.p + stOf[x.id]).join();
+    if (opsPop) refreshPop();
+    if (sig === opsSig) return; opsSig = sig;
+    const pts = [], keep = {};
+    stores.forEach(x => {
+        const k = 's' + x.id, st = stOf[x.id] || ''; keep[k] = 1; pts.push(x.p);
+        let r = opsMk[k];
+        if (!r) { r = opsMk[k] = { m: L.marker(x.p, { icon: HWMap.ICON.store(x.id, st) }).addTo(opsLayer), st }; r.m.on('click', () => openPop('s', x.id, r.m)); }
+        else { r.m.setLatLng(x.p); if (r.st !== st) { r.m.setIcon(HWMap.ICON.store(x.id, st)); r.st = st; } }
+        r.m.setZIndexOffset(st ? 300 : 100);
+    });
+    caps.forEach(c => {
+        const k = 'k' + c.id, p = [c.lat, c.lng], old = locAge(c) > 90000; keep[k] = 1; pts.push(p);
+        let r = opsMk[k];
+        if (!r) { r = opsMk[k] = { m: L.marker(p, { icon: HWMap.ICON.cap(), zIndexOffset: 400 }).addTo(opsLayer) }; r.m.on('click', () => openPop('k', c.id, r.m)); }
+        else slide(r.m, p);
+        r.m.setOpacity(old ? .5 : 1);
+    });
+    Object.keys(opsMk).forEach(k => { if (!keep[k]) { opsLayer.removeLayer(opsMk[k].m); delete opsMk[k]; } });
+    opsExtra.clearLayers();
     const COLOR = { n: '#EF0000', a: '#25CED1', p: '#0E3A3B' }, pinned = {}; stores.forEach(x => { pinned[x.id] = 1; });
     act.forEach(o => {
         const k = o.status === 'new' ? 'n' : o.status === 'accepted' ? 'a' : 'p';
-        /* نقطة استلام ليست متجرًا مسجّلًا (طلب يدوي): دائرة بلون الحالة */
-        if (o.storeLoc && !pinned[o.storeId]) { const p = [o.storeLoc.lat, o.storeLoc.lng]; pts.push(p); L.circleMarker(p, { radius: 8, color: '#fff', weight: 2, fillColor: COLOR[k], fillOpacity: 1 }).bindTooltip(o.code + ' · ' + (o.storeName || ''), { direction: 'top' }).addTo(opsLayer); }
-        if (o.address && o.address.lat != null) { const p = [o.address.lat, o.address.lng]; pts.push(p); L.marker(p, { icon: HWMap.ICON.home() }).bindTooltip(o.code + ' · ' + HWOrders.label(o), { direction: 'top' }).addTo(opsLayer); }
+        if (o.storeLoc && !pinned[o.storeId]) { const p = [o.storeLoc.lat, o.storeLoc.lng]; pts.push(p); L.circleMarker(p, { radius: 8, color: '#fff', weight: 2, fillColor: COLOR[k], fillOpacity: 1 }).on('click', () => openOrderSheet(o.id)).addTo(opsExtra); }
+        if (o.address && o.address.lat != null) { const p = [o.address.lat, o.address.lng]; pts.push(p); L.marker(p, { icon: HWMap.ICON.home() }).on('click', () => openOrderSheet(o.id)).addTo(opsExtra); }
     });
     A$('opsLbl').textContent = act.length + ' طلب نشط · ' + caps.length + ' كابتن';
-    opsMap.invalidateSize(); if (pts.length) HWMap.fit(opsMap, pts, HWMap.mpPad());
+    if (!opsFitted && pts.length) { opsMap.invalidateSize(); HWMap.fit(opsMap, pts, HWMap.mpPad()); opsFitted = true; }
+}
+/* تحريك علامة الكابتن لموقعه الجديد بنعومة بدل القفز */
+function slide(m, to) {
+    const from = m.getLatLng(); if (Math.abs(from.lat - to[0]) < 1e-7 && Math.abs(from.lng - to[1]) < 1e-7) return;
+    if (HWMap.km([from.lat, from.lng], to) > 2) { m.setLatLng(to); return; }
+    const t0 = performance.now(), D = 900;
+    (function step(t) { const k = Math.min(1, (t - t0) / D), e = 1 - Math.pow(1 - k, 3); m.setLatLng([from.lat + (to[0] - from.lat) * e, from.lng + (to[1] - from.lng) * e]); if (k < 1) requestAnimationFrame(step); })(t0);
+}
+function opsFitAll() {
+    if (!opsMap) return; const pts = [];
+    Object.keys(opsMk).forEach(k => { const l = opsMk[k].m.getLatLng(); pts.push([l.lat, l.lng]); });
+    opsExtra.eachLayer(l => { if (l.getLatLng) { const x = l.getLatLng(); pts.push([x.lat, x.lng]); } });
+    if (pts.length) { closePops(); HWMap.fit(opsMap, pts, Object.assign({ animate: true, duration: .6 }, HWMap.mpPad())); }
+    buzz(10);
+}
+function closePops() { try { if (opsMap) opsMap.closePopup(); if (typeof capMap !== 'undefined' && capMap) capMap.closePopup(); } catch (e) {} }
+function popOpts() {
+    const cs = getComputedStyle(document.documentElement), h = parseInt(cs.getPropertyValue('--hdr-h'), 10) || 70, b = scr() === 'screen-dashboard' ? (parseInt(cs.getPropertyValue('--dsh'), 10) || 300) : -40;
+    return { className: 'hw-pop', closeButton: false, minWidth: 264, maxWidth: 290, offset: [0, -20], autoPanPaddingTopLeft: [16, h + 16], autoPanPaddingBottomRight: [16, b + 60] };
+}
+function openPop(t, id, m) {
+    buzz(10); opsPop = { t, id, m };
+    /* نصغّر بطاقة العمليات أولًا ليتسع للبطاقة مكان فوق الخريطة */
+    const dsh = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--dsh'), 10) || 0, wait = dsh > 300 && window.opsSheet ? (opsSheet(0), 340) : 0;
+    setTimeout(() => { m.unbindPopup(); m.bindPopup(() => t === 'k' ? capInfo(id, 'pop') : storeInfo(id, 'pop'), popOpts()).openPopup(); }, wait);
+}
+function capPop(m, t, id) { m.on('click', () => { buzz(10); m.unbindPopup(); m.bindPopup(() => t === 'k' ? capInfo(id, 'pop') : storeInfo(id, 'pop'), popOpts()).openPopup(); }); return m; }
+function refreshPop() { const p = opsPop; if (p && p.m.isPopupOpen()) p.m.setPopupContent(p.t === 'k' ? capInfo(p.id, 'pop') : storeInfo(p.id, 'pop')); }
+setInterval(() => { if (!document.hidden && opsPop) refreshPop(); }, 15000);
+
+/* ---------- بطاقة الكابتن وبطاقة المتجر (الخريطة + ملف المحادثة في الدعم) ---------- */
+const ICN = {
+    call: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2Z"/></svg>',
+    user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
+    plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+    bolt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></svg>',
+    chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.6 8.6 0 0 1-3.8-.9L3 20l1.1-4.6A8.4 8.4 0 0 1 12 3.1a8.4 8.4 0 0 1 9 8.4Z"/></svg>'
+};
+const telOf = p => p ? String(p).replace(/[^\d+]/g, '') : '';
+function agoTxt(ms) { const m = Math.floor(ms / 60000); return m < 1 ? 'الآن' : m < 60 ? 'قبل ' + m + ' د' : 'قبل ' + Math.floor(m / 60) + ' س'; }
+function durTxt(ms) { const m = Math.max(0, Math.floor(ms / 60000)); return m < 60 ? m + ' د' : Math.floor(m / 60) + ' س ' + (m % 60) + ' د'; }
+function ordChips(list) {
+    if (!list.length) return '';
+    return '<div class="ip-ords">' + list.slice(0, 4).map(o => '<button type="button" class="ip-o s-' + o.status + '" onclick="closePops();openOrderSheet(\'' + AE(o.id) + '\')"><b dir="ltr">' + AE(HWOrders.shortNo(o)) + '</b><span>' + AE(HWOrders.SHORT[o.status] || '') + '</span></button>').join('') + (list.length > 4 ? '<span class="ip-more">+' + (list.length - 4) + '</span>' : '') + '</div>';
+}
+function capInfo(id, mode) {
+    const c = capsCol.get(id); if (!c) return '<div class="ip"><p class="ip-none">الكابتن غير موجود</p></div>';
+    const mine = allOrders.filter(o => o.captain && o.captain.id === id), now = mine.filter(HWOrders.isActive);
+    const today = mine.filter(o => o.status === 'delivered' && HWOrders.isToday(doneAt(o) || o.createdAt)).length;
+    const due = settleSum(unsettled(id)).due, rt = HWBiz.captainRating(id, allOrders), age = locAge(c), live = isLive(c);
+    const stTxt = c.active === false ? 'موقوف' : !c.online ? 'غير متصل' : now.length ? 'مشغول · ' + now.length + ' طلب' : live ? 'متاح الآن' : 'متصل بلا إشارة';
+    const stCls = c.active === false ? 'off' : !c.online ? 'idle' : now.length ? 'busy' : live ? 'on' : 'idle';
+    const waiting = allOrders.filter(o => o.status === 'new'), ph = telOf(c.phone);
+    const giveBtn = mode === 'pop' && live && !now.length && waiting.length ? '<button type="button" class="ip-b go" onclick="quickAssign(\'' + AE(HWOrders.prioritySort(waiting)[0].id) + '\',\'' + AE(id) + '\');opsMap.closePopup()">' + ICN.bolt + 'أسند ' + AE(HWOrders.shortNo(HWOrders.prioritySort(waiting)[0])) + '</button>' : '';
+    return '<div class="ip ' + mode + '"><div class="ip-h"><img src="' + AE(HWBiz.capAv(c)) + '" alt=""><div><b>' + AE(c.name || '—') + '</b><span>' + (c.num ? '<i class="cap-no" dir="ltr">' + AE(c.num) + '</i>' : '') + '<em class="ip-st ' + stCls + '">' + stTxt + '</em></span></div></div>' +
+        (c.active === false && c.suspendReason ? '<p class="ip-warn">سبب الإيقاف: ' + AE(c.suspendReason) + '</p>' : '') +
+        '<div class="ip-k"><div><b>' + today + '</b><small>سلّم اليوم</small></div><div><b dir="ltr">' + AM(due) + '</b><small>المستحق عليه</small></div><div><b>' + (rt.n ? rt.avg.toFixed(1) : '—') + '</b><small>التقييم</small></div></div>' +
+        '<div class="ip-l"><span>آخر موقع</span><b>' + (c.lat == null ? 'غير معروف' : age < 90000 ? 'مباشر الآن' : agoTxt(age)) + '</b></div>' +
+        (c.online && c.shiftStart ? '<div class="ip-l"><span>الوردية</span><b>منذ ' + durTxt(Date.now() - c.shiftStart) + '</b></div>' : '') +
+        (mode !== 'pop' && c.phone ? '<div class="ip-l"><span>الهاتف</span><b dir="ltr">' + AE(c.phone) + '</b></div>' : '') +
+        ordChips(now) +
+        '<div class="ip-a">' + giveBtn + (ph ? '<a class="ip-b" href="tel:' + AE(ph) + '">' + ICN.call + 'اتصال</a>' : '') +
+        '<button type="button" class="ip-b" onclick="' + (mode === 'pop' ? 'closePops();' : 'HWSupport.close();') + 'tabGo(\'screen-captains\');openCapSheet(\'' + AE(id) + '\')">' + ICN.user + 'الملف</button></div></div>';
+}
+function storeInfo(id, mode) {
+    const s = HWBiz.storeById(id); if (!s) return '<div class="ip"><p class="ip-none">المتجر غير موجود</p></div>';
+    const st = stCol.get(id) || {}, ss = HWBiz.storeStatus(st), mine = allOrders.filter(o => o.storeId === id), now = HWOrders.prioritySort(mine.filter(HWOrders.isActive));
+    const today = mine.filter(o => HWOrders.isToday(o.createdAt) && o.status !== 'cancelled').length, wait = now.filter(o => o.status === 'new').length, rt = HWBiz.storeRating(id, allOrders), ph = telOf(s.phone);
+    const stTxt = s.active === false ? 'الحساب موقوف' : ss.open ? 'مفتوح' : ss.paused ? 'متوقف مؤقتًا' : 'مغلق';
+    return '<div class="ip ' + mode + '"><div class="ip-h sq"><img src="' + AE(HWBiz.logo(id)) + '" alt="" onerror="this.src=\'logo-icon.png\'"><div><b>' + AE(s.name) + '</b><span><em class="ip-st ' + (s.active === false ? 'off' : ss.open ? 'on' : 'idle') + '">' + stTxt + '</em>' + (s.cat ? '<i class="ip-cat">' + AE(s.cat) + '</i>' : '') + '</span></div></div>' +
+        '<div class="ip-k"><div class="' + (wait ? 'hot' : '') + '"><b>' + wait + '</b><small>بانتظار كابتن</small></div><div><b>' + now.length + '</b><small>نشطة الآن</small></div><div><b>' + today + '</b><small>طلبات اليوم</small></div></div>' +
+        (s.addr ? '<div class="ip-l"><span>العنوان</span><b>' + AE(s.addr) + '</b></div>' : '') +
+        (rt.n ? '<div class="ip-l"><span>تقييم العملاء</span><b>' + rt.avg.toFixed(1) + ' من 5 · ' + rt.n + ' تقييم</b></div>' : '') +
+        (mode !== 'pop' && s.phone ? '<div class="ip-l"><span>الهاتف</span><b dir="ltr">' + AE(s.phone) + '</b></div>' : '') +
+        ordChips(now) +
+        '<div class="ip-a"><button type="button" class="ip-b go" onclick="' + (mode === 'pop' ? 'closePops();' : 'HWSupport.close();') + 'goTo(\'screen-restaurants\');selectPickup(' + AE(JSON.stringify(s.name)) + ',false,\'' + AE(id) + '\')">' + ICN.plus + 'طلب يدوي</button>' +
+        (ph ? '<a class="ip-b" href="tel:' + AE(ph) + '">' + ICN.call + 'اتصال</a>' : '') +
+        '<button type="button" class="ip-b" onclick="' + (mode === 'pop' ? 'closePops();' : 'HWSupport.close();') + 'openStoreAdm(\'' + AE(id) + '\')">' + ICN.user + 'الملف</button></div></div>';
+}
+/* العميل (ملف المحادثة في الدعم): طلباته وسجله */
+function custInfo(phone, name, img) {
+    const mine = allOrders.filter(o => o.customer && o.customer.phone === phone), done = mine.filter(o => o.status === 'delivered'), canc = mine.filter(o => o.status === 'cancelled').length;
+    const now = mine.filter(HWOrders.isActive), spent = done.reduce((a, o) => a + HWOrders.settle(o).collected, 0), rec = custCol.get(phone) || {}, last = mine.slice().sort((a, b) => b.createdAt - a.createdAt)[0], ph = telOf(phone);
+    return '<div class="ip full"><div class="ip-h"><img src="' + AE(img || 'art/av-cm.png') + '" alt="" onerror="this.src=\'logo-icon.png\'"><div><b>' + AE(name || 'عميل') + '</b><span><em class="ip-st ' + (rec.blocked ? 'off' : 'on') + '">' + (rec.blocked ? 'محظور' : 'عميل') + '</em></span></div></div>' +
+        '<div class="ip-k"><div><b>' + done.length + '</b><small>طلبات مسلّمة</small></div><div><b dir="ltr">' + AM(spent) + '</b><small>مجموع ما دفع</small></div><div class="' + (canc ? 'hot' : '') + '"><b>' + canc + '</b><small>ملغاة</small></div></div>' +
+        (phone ? '<div class="ip-l"><span>الهاتف</span><b dir="ltr">' + AE(phone) + '</b></div>' : '') +
+        (last ? '<div class="ip-l"><span>آخر طلب</span><b>' + AE(last.storeName || '') + ' · ' + AE(HWOrders.fmtTime(last.createdAt)) + '</b></div>' : '') +
+        (rec.noShows ? '<div class="ip-l"><span>لم يستلم</span><b>' + rec.noShows + ' طلبات</b></div>' : '') +
+        ordChips(now) + '<div class="ip-a">' + (ph ? '<a class="ip-b" href="tel:' + AE(ph) + '">' + ICN.call + 'اتصال</a>' : '') + '</div></div>';
 }
 /* أهم حالة لطلبات كل متجر الآن: n بانتظار كابتن ← a الكابتن في الطريق للمتجر ← p في الطريق للعميل */
 function storeStates(act) {
@@ -200,7 +309,6 @@ const STAGES = [
     { k: 'a', t: 'الكابتن متجه للمطعم', f: o => o.status === 'accepted', since: o => stepAt(o, 'accepted') || o.createdAt, warn: 12, late: 20 },
     { k: 'p', t: 'في طريقه للعميل', f: o => o.status === 'picked', since: o => stepAt(o, 'picked') || o.createdAt, warn: o => (o.routeMin || 15), late: o => (o.routeMin || 15) + 10 }
 ];
-let liveStore = '';
 function stepAt(o, s) { const h = (o.history || []).filter(x => x.s === s).pop(); return h ? h.t : 0; }
 function minsSince(t) { return Math.max(0, Math.floor((Date.now() - t) / 60000)); }
 function bestCap(o) {
@@ -229,7 +337,6 @@ function renderLive() {
     const box = A$('liveBox'); if (!box) return;
     const q = (A$('opsQ') && A$('opsQ').value || '').trim().replace(/^#/, '');
     let act = allOrders.filter(HWOrders.isActive);
-    if (liveStore) act = act.filter(o => o.storeId === liveStore);
     let found = [];
     if (q) {
         const mt = o => (o.code || '').indexOf(q) >= 0 || HWOrders.shortNo(o).indexOf(q) >= 0 || (o.storeName || o.from || '').indexOf(q) >= 0 || (o.captain && (o.captain.name || '').indexOf(q) >= 0);
@@ -239,7 +346,6 @@ function renderLive() {
     const capsLive = capsCol.list().filter(isLive), busy = busyIds(), free = capsLive.filter(c => !busy[c.id]).length;
     if (A$('opsSum')) A$('opsSum').textContent = act.length + ' طلب نشط · ' + free + ' كابتن متاح من ' + capsLive.length;
     let h = q ? '' : needHtml();
-    if (liveStore) h += '<button type="button" class="lv-filter" onclick="liveStore=\'\';renderLive()">طلبات ' + AE(storeName(liveStore)) + ' فقط · إظهار الكل ✕</button>';
     STAGES.forEach(st => {
         const l = HWOrders.prioritySort(act.filter(st.f));
         if (!l.length) return;
@@ -264,9 +370,6 @@ document.addEventListener('click', (e) => {
     const lv = e.target.closest('[data-lv]'); if (lv && !e.target.closest('[data-act],a')) openOrderSheet(lv.dataset.lv);
 });
 setInterval(() => { if (!document.hidden && scr() === 'screen-dashboard') renderLive(); }, 20000);
-/* الضغط على شعار متجر في الخريطة: طلباته الجارية فقط */
-function focusStore(id) { liveStore = id; renderLive(); if (window.opsSheet) opsSheet(1); const sh = document.querySelector('#screen-dashboard .mp-sheet'); if (sh) sh.scrollTo({ top: 0, behavior: 'smooth' }); }
-
 /* =========================================================
    3) تسوية الكباتن
    ========================================================= */
@@ -580,7 +683,7 @@ setTimeout(() => { dailyUpkeep(); backfillKeys(); }, 8000);
    ========================================================= */
 (function () {
     const KEY = 'hw-ops-sheet', root = document.documentElement;
-    const snaps = () => { const vh = window.innerHeight, hh = parseInt(getComputedStyle(root).getPropertyValue('--hdr-h'), 10) || 70; return [220, Math.round(vh * .5), vh - hh - 12]; };
+    const snaps = () => { const vh = window.innerHeight, hh = parseInt(getComputedStyle(root).getPropertyValue('--hdr-h'), 10) || 70; return [262, Math.round(vh * .52), vh - hh - 12]; };
     let level = 1; try { level = +localStorage.getItem(KEY) || 1; } catch (e) {}
     const sheet = () => document.querySelector('#screen-dashboard .mp-sheet');
     function apply(px, save) {
@@ -589,11 +692,11 @@ setTimeout(() => { dailyUpkeep(); backfillKeys(); }, 8000);
         if (save !== undefined) { level = save; try { localStorage.setItem(KEY, save); } catch (e) {} }
     }
     function snapTo(i) { i = Math.max(0, Math.min(2, i)); apply(snaps()[i], i); refit(); }
-    function refit() { setTimeout(() => { if (typeof opsMap !== 'undefined' && opsMap) { opsMap.invalidateSize(); opsSig = ''; renderOpsMap(); } }, 340); }
+    function refit() {}   /* الخريطة بملء الشاشة خلف البطاقة: لا تتغير ولا تُعاد ملاءمتها عند السحب (كان سبب القفز) */
     let y0 = 0, h0 = 0, t0 = 0, moved = false, on = false;
     function start(e) {
         const sh = sheet(); if (!sh) return;
-        const p = e.touches ? e.touches[0] : e; y0 = p.clientY; h0 = sh.getBoundingClientRect().height; t0 = Date.now(); moved = false; on = true; sh.classList.add('dragging');
+        const p = e.touches ? e.touches[0] : e; y0 = p.clientY; h0 = sh.getBoundingClientRect().height; t0 = Date.now(); moved = false; on = true; sh.classList.add('dragging'); root.classList.add('ops-drag');
     }
     function move(e) {
         if (!on) return; const p = e.touches ? e.touches[0] : e, dy = p.clientY - y0;
@@ -601,7 +704,7 @@ setTimeout(() => { dailyUpkeep(); backfillKeys(); }, 8000);
         if (e.cancelable) e.preventDefault(); apply(h0 - dy);
     }
     function end(e) {
-        if (!on) return; on = false; const sh = sheet(); if (sh) sh.classList.remove('dragging');
+        if (!on) return; on = false; const sh = sheet(); if (sh) sh.classList.remove('dragging'); root.classList.remove('ops-drag');
         const p = e.changedTouches ? e.changedTouches[0] : e, dy = p.clientY - y0, v = dy / Math.max(1, Date.now() - t0);
         if (!moved) { if (e.target.closest && e.target.closest('.mp-grab')) snapTo(level === 0 ? 1 : level === 1 ? 2 : 0); return; }
         const h = h0 - dy, s = snaps();

@@ -241,7 +241,8 @@ function renderSupport() {
 }
 HWSupport.init({
     role: 'a', me: () => currentUser ? { uid: 'admin' } : null, onChange: renderSupport,
-    avatar: (t) => t.role === 's' ? HWBiz.logo(t.uid) : t.role === 'k' ? HWBiz.capAv(HWDB.col('captains').get(t.uid) || { id: t.uid }) : ''
+    avatar: (t) => t.role === 's' ? HWBiz.logo(t.uid) : t.role === 'k' ? HWBiz.capAv(HWDB.col('captains').get(t.uid) || { id: t.uid }) : '',
+    profile: (t) => t.role === 'k' ? capInfo(t.uid, 'full') : t.role === 's' ? storeInfo(t.uid, 'full') : custInfo(t.phone || t.uid, t.name, t.img)
 });
 
 /* الإطار الزجاجي يكبر ليظهر نموذج الدخول، وزر الرجوع يعيد الشاشة الافتتاحية كما كانت */
@@ -452,7 +453,8 @@ document.getElementById('orderForm').addEventListener('submit', function(e){
   document.getElementById('orderNoteField').hidden = true; document.getElementById('noteTg').hidden = false;
   const ls = document.getElementById('lastSent'); ls.hidden = false;
   ls.innerHTML = '<span>آخر طلب: <b data-sn="' + o.id + '">' + HWOrders.esc(HWOrders.shortNo(o)) + '</b> · ' + HWOrders.esc(d ? d.n : 'وجهة غير محددة') + '</span><button type="button" class="more-link" onclick="tabGo(\'screen-dashboard\')">إلى الرئيسية</button>';
-  setTimeout(() => { const b = ls.querySelector('[data-sn]'), x = HWOrders.get(o.id); if (b && x) b.textContent = HWOrders.shortNo(x); }, 1500);
+  /* الرقم يصل من الخادم خلال لحظات: نحدّثه حتى يصل */
+  let tries = 0; (function upd() { const b = ls.querySelector('[data-sn]'), x = HWOrders.get(o.id); if (!b) return; const n = x ? HWOrders.shortNo(x) : ''; if (n && n.indexOf('…') < 0) { b.textContent = n; b.classList.remove('wait'); } else { b.classList.add('wait'); if (++tries < 20) setTimeout(upd, 500); } })();
 });
 
 try { if ("scrollRestoration" in history) history.scrollRestoration = "manual"; } catch (e) {}
@@ -574,26 +576,70 @@ function onOrders(list) {
     renderBoard();
 }
 
+/* =========================================================
+   لوحة الطلبات بشكل جدول تداول: صف لكل طلب، أرقام بعرض ثابت،
+   ومضة لونية عند تغير حالة الطلب (مثل تغير سعر السهم)، وترتيب بالضغط على رأس العمود
+   ========================================================= */
+let bdPrev = null, bdSortK = '', bdSortDir = -1;
+function doneAt(o) { const h = (o.history || []).filter(x => x.s === 'delivered').pop(); return h ? h.t : o.status === 'delivered' ? o.updatedAt : 0; }
+function boardSort(list) {
+    if (!bdSortK) return bdFilter === 'live' || bdFilter === 'new' ? HWOrders.prioritySort(list) : list.slice().sort((a, b) => b.createdAt - a.createdAt);
+    const v = o => bdSortK === 'fee' ? (HWOrders.settle(o).fee || 0) : bdSortK === 'age' ? o.createdAt : bdSortK === 'no' ? (o.dayNo || o.createdAt) : 0;
+    return list.slice().sort((a, b) => (v(a) - v(b)) * bdSortDir);
+}
+function ageOf(o) {
+    if (o.status === 'delivered' && doneAt(o)) return { t: Math.max(1, Math.round((doneAt(o) - o.createdAt) / 60000)) + ' د', c: 'fin' };
+    if (o.status === 'cancelled') return { t: HWOrders.fmtTime(o.createdAt).replace(/ [صم]$/, ''), c: 'fin' };
+    const m = Math.max(0, Math.floor((Date.now() - o.createdAt) / 60000)), lim = o.status === 'new' ? [3, 6] : [30, 45];
+    return { t: m < 60 ? m + ' د' : Math.floor(m / 60) + ' س', c: m >= lim[1] ? 'late' : m >= lim[0] ? 'warn' : '' };
+}
+function boardTable(list) {
+    const H = HWOrders.esc, th = (k, t, cls) => '<button type="button" class="bt-h ' + (cls || '') + (k && bdSortK === k ? ' on' : '') + '" ' + (k ? 'data-sort="' + k + '"' : 'disabled') + '>' + t + (k && bdSortK === k ? (bdSortDir < 0 ? ' ↓' : ' ↑') : '') + '</button>';
+    return '<div class="bt" role="table"><div class="bt-r bt-hd" role="row">' + th('no', 'الطلب') + th('', 'المسار') + th('', 'الكابتن', 'c-cap') + th('', 'القيمة', 'c-val') + th('fee', 'الأجرة', 'num') + th('age', 'الوقت', 'num') + '</div>' +
+        list.slice(0, 300).map(o => {
+            const cp = o.captain || {}, fee = HWOrders.settle(o).fee, a = ageOf(o), ch = bdPrev && bdPrev[o.id] !== o.status ? (bdPrev[o.id] ? ' tick' : ' tick-new') : '';
+            return '<div class="bt-r s-' + o.status + (o.urgent ? ' urg' : '') + ch + '" role="row" tabindex="0" data-bt="' + H(o.id) + '">' +
+                '<span class="c-no"><b dir="ltr">' + H(HWOrders.shortNo(o)) + '</b><small>' + H(HWOrders.SHORT[o.status] || '') + '</small></span>' +
+                '<span class="c-rt"><b>' + H(o.storeName || o.from || '—') + '</b><small>' + (o.to ? '← ' + H(o.to) : HWOrders.isMarket(o) ? '← ' + H((o.address && (o.address.label || o.address.area)) || 'عميل') : '<i class="tbd">بلا وجهة</i>') + '</small></span>' +
+                '<span class="c-cap">' + (cp.name ? '<img src="' + H(HWBiz.capAv(cp)) + '" alt=""><em>' + H(String(cp.name).split(' ')[0]) + '</em>' : '<em class="none">—</em>') + '</span>' +
+                '<span class="c-val num">' + (o.orderValue ? H(HWOrders.money(Number(o.orderValue))) : '—') + '</span>' +
+                '<span class="num c-fee">' + (fee > 0 ? H(HWOrders.money(fee)) : '<i class="tbd">لاحقًا</i>') + '</span>' +
+                '<span class="num c-age ' + a.c + '">' + a.t + '</span></div>';
+        }).join('') + '</div>' + (list.length > 300 ? '<p class="bt-more">يظهر أحدث 300 طلب</p>' : '');
+}
+document.addEventListener('click', e => {
+    const h = e.target.closest('.bt-h[data-sort]'); if (h) { const k = h.dataset.sort; if (bdSortK === k) { if (bdSortDir < 0) bdSortDir = 1; else { bdSortK = ''; bdSortDir = -1; } } else { bdSortK = k; bdSortDir = -1; } buzz(); renderBoard(); return; }
+    const r = e.target.closest('[data-bt]'); if (r) { buzz(); openOrderSheet(r.dataset.bt); }
+});
+document.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.dataset && e.target.dataset.bt) { e.preventDefault(); openOrderSheet(e.target.dataset.bt); } });
+setInterval(() => { if (!document.hidden && document.querySelector('#screen-board.active')) renderBoard(); }, 30000);
 function renderBoard() {
     const st = HWOrders.stats(allOrders), act = allOrders.filter(HWOrders.isActive), running = st.active - st.fresh;
     const fresh = allOrders.filter(o => o.status === 'new');
     const badge = document.getElementById('tabBadge');
     if (badge) { badge.textContent = fresh.length; badge.classList.toggle('on', fresh.length > 0); }
 
+    /* شريط مؤشرات مثل شاشات التداول: الرقم، والفرق عن أمس في نفس الساعة */
     const bs = document.getElementById('bdStats');
-    if (bs) bs.innerHTML = '<div class="stat"><b>' + st.today + '</b><small>طلبات اليوم</small></div>' +
-        '<div class="stat hot"><b>' + st.fresh + '</b><small>بانتظار كابتن</small></div>' +
-        '<div class="stat"><b>' + running + '</b><small>قيد التنفيذ</small></div>' +
-        '<div class="stat"><b>' + st.delivered + '</b><small>تم تسليمها اليوم</small></div>';
+    if (bs) {
+        const y0 = new Date(); y0.setHours(0, 0, 0, 0); const yS = y0.getTime() - 864e5, yE = Date.now() - 864e5;
+        const yl = allOrders.filter(o => o.createdAt >= yS && o.createdAt <= yE), yN = yl.length, yD = yl.filter(o => o.status === 'delivered').length;
+        const tl = allOrders.filter(o => HWOrders.isToday(o.createdAt)), gmv = tl.filter(o => o.status === 'delivered').reduce((a, o) => a + (Number(o.orderValue) || HWOrders.settle(o).items || 0), 0);
+        const dmin = tl.filter(o => o.status === 'delivered' && doneAt(o)).map(o => (doneAt(o) - o.createdAt) / 60000), avg = dmin.length ? Math.round(dmin.reduce((a, b) => a + b, 0) / dmin.length) : 0;
+        const dl = (n, y) => { const d = n - y; return d ? '<i class="' + (d > 0 ? 'up' : 'dn') + '">' + (d > 0 ? '▲' : '▼') + Math.abs(d) + '</i>' : '<i>—</i>'; };
+        bs.className = 'tk-strip';
+        bs.innerHTML = [['طلبات اليوم', st.today, dl(st.today, yN)], ['بانتظار كابتن', st.fresh, '', st.fresh ? 'hot' : ''], ['قيد التنفيذ', running, ''], ['مسلّمة', st.delivered, dl(st.delivered, yD)], ['ملغاة', st.cancelled, '', st.cancelled ? 'warn' : ''], ['أجور اليوم', HWOrders.money(st.fees), ''], ['قيمة الطلبات', HWOrders.money(gmv), ''], ['متوسط التوصيل', avg ? avg + ' د' : '—', '']]
+            .map(x => '<div class="tk ' + (x[3] || '') + '"><small>' + x[0] + '</small><b dir="ltr">' + x[1] + '</b>' + x[2] + '</div>').join('');
+    }
     document.querySelectorAll('#bdSeg button').forEach(b => {
         const f = b.dataset.f, n = applyFilter(allOrders, f).length;
         b.classList.toggle('on', f === bdFilter);
         b.innerHTML = b.textContent.replace(/\d+$/, '').trim() + '<i>' + n + '</i>';
     });
-    const list = applyFilter(allOrders, bdFilter);
+    const list = boardSort(applyFilter(allOrders, bdFilter));
     const bl = document.getElementById('bdList');
-    if (bl) bl.innerHTML = list.length ? list.map(o => HWOrders.card(o, actionsFor(o), true)).join('')
-        : '<div class="empty-orders">' + iconBox + 'لا توجد طلبات هنا الآن</div>';
+    if (bl) bl.innerHTML = list.length ? boardTable(list) : '<div class="empty-orders">' + iconBox + 'لا توجد طلبات هنا الآن</div>';
+    bdPrev = {}; allOrders.forEach(o => { bdPrev[o.id] = o.status; });
     if (openSheetId) renderSheet(openSheetId);
 }
 
