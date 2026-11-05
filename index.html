@@ -17,12 +17,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;500;600;700;800;900&family=Baloo+2:wght@500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="leaflet.css?v=95">
-<link rel="stylesheet" href="styles.css?v=95">
-<link rel="stylesheet" href="map.css?v=95">
-<link rel="stylesheet" href="theme.css?v=95">
-<link rel="stylesheet" href="dark.css?v=95">
-<link rel="stylesheet" href="hw-layout.css?v=95">
+<link rel="stylesheet" href="leaflet.css?v=97">
+<link rel="stylesheet" href="styles.css?v=97">
+<link rel="stylesheet" href="map.css?v=97">
+<link rel="stylesheet" href="theme.css?v=97">
+<link rel="stylesheet" href="dark.css?v=97">
+<link rel="stylesheet" href="hw-layout.css?v=97">
 </head>
 <body>
 
@@ -111,20 +111,14 @@
       <div class="mp-map"><div class="lmap" id="opsMapEl"></div>
         <div class="mp-chips"><span class="mp-chip" id="opsLbl">خريطة العمليات</span><span class="mp-chip mp-key"><i class="n"></i>بانتظار<i class="a"></i>للمتجر<i class="p"></i>للعميل</span></div></div>
       <div class="mp-sheet"><span class="mp-grab"></span><div class="container">
-        <div class="page-heading">
-          <h1>أهلاً بك</h1>
-          <p>طلبات اليوم وما يحتاج تدخلك أولًا</p>
+        <div class="ops-head">
+          <div><h1>العمليات الآن</h1><p id="opsSum">الطلبات الحية وما يحتاج تدخلك</p></div>
+          <button type="button" class="ops-new" onclick="goTo('screen-restaurants')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>طلب يدوي</button>
         </div>
-        <div class="card-stack app-home">
-          <div id="kpiBox"></div>
-          <div class="sec-label">العمليات</div>
-          <div class="mini-grid one">
-            <button class="action-card prep glass mini" type="button" onclick="goTo('screen-restaurants')">
-              <span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg></span>
-              <span class="txt"><h3>طلب يدوي</h3><p>طلب وصلك بالهاتف تدخله للنظام</p></span>
-            </button>
-          </div>
-        </div>
+        <label class="ops-q"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input type="search" id="opsQ" placeholder="ابحث برقم الطلب أو المطعم أو الكابتن" autocomplete="off" oninput="renderLive()"></label>
+        <div id="liveBox"></div>
+        <div class="sec-label">أرقام اليوم</div>
+        <div id="kpiBox"></div>
       </div></div>
     </section>
 
@@ -141,8 +135,8 @@
     <section class="screen" id="screen-order">
       <div class="container">
         <div class="page-heading">
-          <h1>تفاصيل الطلب</h1>
-          <p>يدخل الطلب للنظام ويُعرض على أقرب كابتن</p>
+          <h1>طلب يدوي</h1>
+          <p>الوجهة وقيمة الطلب فقط، والباقي على النظام</p>
         </div>
 
         <form class="form-card glass" id="orderForm" novalidate>
@@ -152,39 +146,33 @@
           </div>
 
           <div class="field" id="customNameField" style="display:none;">
-            <label>اسم نقطة الاستلام</label>
+            <label for="customName">اسم نقطة الاستلام</label>
             <input type="text" id="customName" placeholder="مثال: مطعم الديار">
             <div class="err-msg">الرجاء كتابة اسم نقطة الاستلام</div>
           </div>
 
-          <div class="field" id="orderNumField">
-            <label>رقم الطلب</label>
-            <input type="text" id="orderNumber" inputmode="numeric" placeholder="مثال: 45">
-            <div class="err-msg">الرجاء إدخال رقم الطلب</div>
+          <div class="field" id="orderDestField">
+            <label>الوجهة</label>
+            <button type="button" class="dest-btn" id="orderDestBtn" onclick="pickOrderDest()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
+              <span id="orderDestTxt">اختر المنطقة من قائمة الأسعار</span><em id="orderDestFee"></em>
+            </button>
+            <div class="err-msg">اختر الوجهة، أو "وجهة غير محددة"</div>
           </div>
 
           <div class="field" id="orderValueField">
-            <label>قيمة الطلب</label>
+            <label for="orderValue">قيمة الطلب</label>
             <div class="value-wrap">
-              <input type="text" id="orderValue" placeholder="مثال: 25 أو 25.5+">
+              <input type="text" id="orderValue" inputmode="decimal" placeholder="مثال: 12.50" autocomplete="off">
               <span class="cur">د.أ</span>
             </div>
             <div class="err-msg">الرجاء إدخال قيمة الطلب</div>
           </div>
 
-          <div class="field" id="orderFeeField">
-            <label>أجور التوصيل <span class="opt">(اختياري، يمكن تحديدها لاحقًا)</span></label>
-            <div class="value-wrap">
-              <input type="text" id="orderFee" inputmode="decimal" placeholder="مثال: 2.00">
-              <span class="cur">د.أ</span>
-            </div>
-            <div class="fee-quick" id="feeQuick"></div>
-            <div class="err-msg">اكتب رقمًا صحيحًا مثل 2 أو 2.50</div>
-          </div>
-
-          <div class="field">
-            <label>ملاحظات أخرى <span class="opt">(اختياري)</span></label>
-            <textarea id="orderNotes" placeholder="أي تفاصيل إضافية للكابتن..."></textarea>
+          <button type="button" class="more-link note-tg" id="noteTg" onclick="this.hidden=true;document.getElementById('orderNoteField').hidden=false;document.getElementById('orderNotes').focus()">+ ملاحظة للكابتن</button>
+          <div class="field" id="orderNoteField" hidden>
+            <label for="orderNotes">ملاحظة للكابتن</label>
+            <textarea id="orderNotes" rows="2" placeholder="مثال: الطابق الثاني، بجانب الصيدلية"></textarea>
           </div>
 
           <button type="submit" class="submit-btn" id="orderSubmitBtn">
@@ -192,6 +180,7 @@
             <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
             <span class="btn-label">إرسال للكباتن</span>
           </button>
+          <div class="last-sent" id="lastSent" hidden></div>
         </form>
       </div>
     </section>
@@ -347,27 +336,28 @@
   </form>
 </div>
 
-<script src="leaflet.js?v=95"></script>
-<script src="hw-i18n.js?v=95"></script>
-<script src="hw-config.js?v=95"></script>
-<script src="hw-map.js?v=95"></script>
-<script src="hw-food.js?v=95"></script>
-<script src="hw-orders.js?v=95"></script>
-<script src="hw-notify.js?v=95"></script>
-<script src="hw-push.js?v=95"></script>
-<script src="hw-biz.js?v=95"></script>
-<script src="hw-head.js?v=95"></script>
-<script src="hw-support.js?v=95"></script>
-<script src="hw-crop.js?v=95"></script>
-<script src="hw-menued.js?v=95"></script>
-<script src="hw-prices.js?v=95"></script>
-<script src="hw-pricelist.js?v=95"></script>
-<script src="script.js?v=95"></script>
-<script src="disp-v2.js?v=95"></script>
-<script src="admin.js?v=95"></script>
-<script src="admin-stores.js?v=95"></script>
-<script src="hw-ui.js?v=95"></script>
-<script src="hw-stats.js?v=95"></script>
-<script src="hw-onboard.js?v=95" data-role="admin"></script>
+<script src="leaflet.js?v=97"></script>
+<script src="hw-i18n.js?v=97"></script>
+<script src="hw-config.js?v=97"></script>
+<script src="hw-map.js?v=97"></script>
+<script src="hw-food.js?v=97"></script>
+<script src="hw-orders.js?v=97"></script>
+<script src="hw-notify.js?v=97"></script>
+<script src="hw-push.js?v=97"></script>
+<script src="hw-biz.js?v=97"></script>
+<script src="hw-head.js?v=97"></script>
+<script src="hw-support.js?v=97"></script>
+<script src="hw-crop.js?v=97"></script>
+<script src="hw-menued.js?v=97"></script>
+<script src="hw-prices.js?v=97"></script>
+<script src="hw-pricelist.js?v=97"></script>
+<script src="hw-dest.js?v=97"></script>
+<script src="script.js?v=97"></script>
+<script src="disp-v2.js?v=97"></script>
+<script src="admin.js?v=97"></script>
+<script src="admin-stores.js?v=97"></script>
+<script src="hw-ui.js?v=97"></script>
+<script src="hw-stats.js?v=97"></script>
+<script src="hw-onboard.js?v=97" data-role="admin"></script>
 </body>
 </html>

@@ -366,6 +366,8 @@ function selectPickup(name, isCustom, sid){
   state.pickup = { name, isCustom, sid: sid || '' };
   document.getElementById('orderForm').reset();
   clearInvalid('orderForm');
+  orderDest = undefined; paintOrderDest(); document.getElementById('lastSent').hidden = true;
+  document.getElementById('orderNoteField').hidden = true; document.getElementById('noteTg').hidden = false;
 
   const customField = document.getElementById('customNameField');
   document.getElementById('pickupPillText').textContent = isCustom ? 'نقطة استلام أخرى' : name;
@@ -373,6 +375,7 @@ function selectPickup(name, isCustom, sid){
   if (isCustom) document.getElementById('customName').value = '';
 
   goTo('screen-order');
+  setTimeout(pickOrderDest, 300);   /* الخطوة التالية مباشرة: اختيار الوجهة */
 }
 
 /* ---------- أدوات ---------- */
@@ -405,44 +408,49 @@ function setBtnLoading(btn, isLoading){
   btn.classList.toggle('loading', isLoading);
 }
 
-/* ---------- نموذج تحضير الطلب ---------- */
+/* ---------- الطلب اليدوي: الوجهة من قائمة أسعار المطعم + قيمة الطلب ----------
+   الأجرة تأتي من المنطقة تلقائيًا. "وجهة غير محددة" تنزل بلا أجرة وتظهر في "يحتاج تدخلك".
+   بعد الإرسال يبقى نفس المطعم مختارًا لإدخال الطلب التالي مباشرة */
+let orderDest = undefined;   /* undefined = لم تُختر بعد، null = غير محددة، {n,p,fee} = منطقة */
+function paintOrderDest() {
+  const t = document.getElementById('orderDestTxt'), f = document.getElementById('orderDestFee'), b = document.getElementById('orderDestBtn');
+  b.classList.toggle('set', orderDest !== undefined);
+  t.textContent = orderDest === undefined ? 'اختر المنطقة من قائمة الأسعار' : orderDest === null ? 'وجهة غير محددة' : orderDest.n;
+  f.textContent = orderDest === undefined ? '' : orderDest === null ? 'الأجرة لاحقًا' : orderDest.fee.toFixed(2) + ' د.أ';
+}
+function pickOrderDest() {
+  HWDest.open({ sid: state.pickup.sid || '', sub: state.pickup.name || 'طلب يدوي', title: 'إلى أين؟', onPick: (a) => {
+    orderDest = a; setInvalid('orderDestField', false); paintOrderDest();
+    setTimeout(() => document.getElementById('orderValue').focus(), 150);
+  } });
+}
 document.getElementById('orderForm').addEventListener('submit', function(e){
   e.preventDefault();
-  let valid = true;
-
-  let pickupName = state.pickup.name;
+  let valid = true, pickupName = state.pickup.name;
   if (state.pickup.isCustom){
     const customVal = document.getElementById('customName').value.trim();
-    setInvalid('customNameField', !customVal);
-    if (!customVal) valid = false;
+    setInvalid('customNameField', !customVal); if (!customVal) valid = false;
     pickupName = customVal;
   }
-
-  const orderNumber = document.getElementById('orderNumber').value.trim();
-  setInvalid('orderNumField', !orderNumber);
-  if (!orderNumber) valid = false;
-
+  setInvalid('orderDestField', orderDest === undefined); if (orderDest === undefined) valid = false;
   const orderValue = document.getElementById('orderValue').value.trim();
-  setInvalid('orderValueField', !orderValue);
-  if (!orderValue) valid = false;
-
-  const feeRaw = document.getElementById('orderFee').value.trim(), fee = parseFee(feeRaw);
-  setInvalid('orderFeeField', feeRaw !== '' && fee == null);
-  if (feeRaw !== '' && fee == null) valid = false;
-
+  setInvalid('orderValueField', !orderValue); if (!orderValue) valid = false;
   if (!valid) return;
 
-  const btn = document.getElementById('orderSubmitBtn');
-  setBtnLoading(btn, true);
-
-  const notes = document.getElementById('orderNotes').value.trim();
+  const notes = document.getElementById('orderNotes').value.trim(), d = orderDest;
   const pst = state.pickup.sid ? HWDB.col('storestate').get(state.pickup.sid) || {} : {}, psd = state.pickup.sid ? HWBiz.storeById(state.pickup.sid) || {} : {};
-  HWOrders.create({ source: 'coordinator', storeId: state.pickup.sid || '', storeName: pickupName, kind: 'pickup', from: pickupName, to: '',
+  const o = HWOrders.create({ source: 'coordinator', storeId: state.pickup.sid || '', storeName: pickupName, kind: 'pickup', from: pickupName, to: d ? d.n : '',
       storeLoc: pst.lat != null ? { lat: pst.lat, lng: pst.lng } : null, storePhone: psd.phone || '', storeAddr: psd.addr || '',
-      price: fee == null ? '' : fee.toFixed(2), unpriced: fee == null, orderNo: orderNumber, orderValue: orderValue, notes: notes });
-  setBtnLoading(btn, false);
-  HWOrders.toast(fee == null ? 'دخل الطلب للنظام. لا تنسَ تحديد أجرة التوصيل' : 'دخل الطلب للنظام ويُعرض الآن على أقرب كابتن');
-  resetAndGo('screen-board');
+      price: d ? d.fee.toFixed(2) : '', unpriced: !d, orderValue: orderValue, notes: notes });
+  buzz(18);
+  HWOrders.toast(d ? 'أُرسل الطلب للكباتن' : 'أُرسل الطلب. الأجرة تُحدد لاحقًا من "يحتاج تدخلك"');
+  /* جاهز للطلب التالي من نفس المطعم */
+  orderDest = undefined; paintOrderDest();
+  document.getElementById('orderValue').value = ''; document.getElementById('orderNotes').value = '';
+  document.getElementById('orderNoteField').hidden = true; document.getElementById('noteTg').hidden = false;
+  const ls = document.getElementById('lastSent'); ls.hidden = false;
+  ls.innerHTML = '<span>آخر طلب: <b data-sn="' + o.id + '">' + HWOrders.esc(HWOrders.shortNo(o)) + '</b> · ' + HWOrders.esc(d ? d.n : 'وجهة غير محددة') + '</span><button type="button" class="more-link" onclick="tabGo(\'screen-dashboard\')">إلى الرئيسية</button>';
+  setTimeout(() => { const b = ls.querySelector('[data-sn]'), x = HWOrders.get(o.id); if (b && x) b.textContent = HWOrders.shortNo(x); }, 1500);
 });
 
 try { if ("scrollRestoration" in history) history.scrollRestoration = "manual"; } catch (e) {}
@@ -452,7 +460,6 @@ window.addEventListener("pageshow", () => window.scrollTo(0, 0));
 (function init(){
   buildSplashIcons();
   HWBiz.storesCol.subscribe(renderRestaurants); HWBiz.onMedia(renderRestaurants);
-  setTimeout(() => { document.getElementById('feeQuick').innerHTML = feeChips('orderFee'); });
 
   let skipSplash = false;
   try { skipSplash = sessionStorage.getItem('hw-skip-splash') === '1'; sessionStorage.removeItem('hw-skip-splash'); } catch (e) {}
@@ -507,9 +514,11 @@ function openFee(id) {
     const cur = HWOrders.settle(o).fee, body = document.getElementById('orderSheetBody');
     openSheetId = null;
     body.className = 'modal-card glass';
-    body.innerHTML = '<div class="sh-head"><div><small>' + HWOrders.esc(o.code) + ' · ' + HWOrders.esc(o.storeName || o.from || '') + '</small><h3>أجور التوصيل</h3></div></div>' +
+    body.innerHTML = '<div class="sh-head"><div><small>' + HWOrders.esc(HWOrders.shortNo(o)) + ' · ' + HWOrders.esc(o.storeName || o.from || '') + '</small><h3>أجور التوصيل</h3></div></div>' +
         (o.captain && o.captain.name ? '<p class="mut" style="margin:0 0 10px">الكابتن ' + HWOrders.esc(o.captain.name) + ' · تظهر الأجرة في أرباحه فور الحفظ</p>' : '') +
-        '<div class="field" id="feeEdField"><label for="feeEd">المبلغ</label><div class="value-wrap"><input type="text" id="feeEd" inputmode="decimal" value="' + (cur > 0 ? cur.toFixed(2) : '') + '" placeholder="مثال: 2.00"><span class="cur">د.أ</span></div>' +
+        (o.capDest ? '<button type="button" class="cap-sug" onclick="applyFeeDest(\'' + o.id + '\',' + HWOrders.esc(JSON.stringify(o.capDest)).replace(/"/g, '&quot;') + ')"><span>اقترح الكابتن ' + HWOrders.esc(o.captain && o.captain.name || '') + ': <b>' + HWOrders.esc(o.capDest.n) + '</b></span><em dir="ltr">' + HWOrders.esc(Number(o.capDest.fee || 0).toFixed(2)) + '</em><i>اعتماد</i></button>' : '') +
+        '<button type="button" class="dest-btn" onclick="feeFromList(\'' + o.id + '\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/></svg><span>' + (o.to ? HWOrders.esc(o.to) : 'اختر الوجهة من قائمة الأسعار') + '</span><em>تغيير</em></button>' +
+        '<div class="field" id="feeEdField"><label for="feeEd">أو اكتب المبلغ</label><div class="value-wrap"><input type="text" id="feeEd" inputmode="decimal" value="' + (cur > 0 ? cur.toFixed(2) : '') + '" placeholder="مثال: 2.00"><span class="cur">د.أ</span></div>' +
         '<div class="fee-quick">' + feeChips('feeEd') + '</div><div class="err-msg">اكتب رقمًا صحيحًا مثل 2 أو 2.50</div></div>' +
         '<div class="sh-actions"><button type="button" class="ghost-btn" style="flex:1" onclick="closeOrderSheet()">لاحقًا</button><button type="button" class="submit-btn" style="flex:2" onclick="saveFee(\'' + o.id + '\')"><span class="btn-label">حفظ الأجرة</span></button></div>';
     document.getElementById('orderSheet').classList.add('show');
@@ -518,11 +527,23 @@ function openFee(id) {
 function saveFee(id) {
     const o = HWOrders.get(id), v = parseFee(document.getElementById('feeEd').value);
     setInvalid('feeEdField', v == null || v <= 0); if (!o || v == null || v <= 0) return;
-    HWOrders.update(id, { price: v.toFixed(2), unpriced: false, pricedBy: actorName(), pricedAt: Date.now() }, 'priced');
+    HWOrders.update(id, { price: v.toFixed(2), unpriced: false, capDest: null, pricedBy: actorName(), pricedAt: Date.now() }, 'priced');
     logAct('price', 'أجرة الطلب ' + o.code + ': ' + v.toFixed(2) + ' د.أ');
-    buzz(15); HWOrders.toast('تم حفظ أجرة ' + o.code);
+    buzz(15); HWOrders.toast('تم حفظ أجرة ' + HWOrders.shortNo(o));
     const next = unpricedList()[0];
     if (next) setTimeout(() => openFee(next.id), 250); else closeOrderSheet();
+}
+/* الوجهة من قائمة أسعار المطعم: تحدد المنطقة والأجرة معًا */
+function feeFromList(id) {
+    const o = HWOrders.get(id); if (!o) return;
+    HWDest.open({ sid: o.storeId || '', sub: HWOrders.shortNo(o) + ' · ' + (o.storeName || ''), title: 'وجهة الطلب', allowNone: false, onPick: (a) => { if (a) applyFeeDest(id, a); } });
+}
+function applyFeeDest(id, a) {
+    const o = HWOrders.get(id); if (!o || !a) return;
+    HWOrders.update(id, { to: a.n, price: Number(a.fee).toFixed(2), unpriced: false, capDest: null, pricedBy: actorName(), pricedAt: Date.now() }, 'priced');
+    logAct('price', 'وجهة وأجرة ' + o.code + ': ' + a.n + ' · ' + Number(a.fee).toFixed(2) + ' د.أ');
+    buzz(15); HWOrders.toast('تم: ' + a.n + ' · ' + Number(a.fee).toFixed(2) + ' د.أ');
+    const next = unpricedList()[0]; if (next) setTimeout(() => openFee(next.id), 250); else closeOrderSheet();
 }
 function openPricing() { const l = unpricedList(); if (l.length) openFee(l[0].id); }
 function actionsFor(o) {
@@ -530,9 +551,11 @@ function actionsFor(o) {
     const a = actionsFor0(o, id); return fb + a;
 }
 function actionsFor0(o, id) {
-    if (o.status === 'new') return '<button type="button" class="btn-s" data-act="assign" data-id="' + id + '">تعيين كابتن</button><button type="button" class="btn-s dng" data-act="cancel" data-id="' + id + '">إلغاء</button>';
-    if (o.status === 'accepted') return '<button type="button" class="btn-s" data-act="picked" data-id="' + id + '">تم الاستلام من المتجر</button><button type="button" class="btn-s alt" data-act="assign" data-id="' + id + '">تغيير الكابتن</button>';
-    if (o.status === 'picked') return '<button type="button" class="btn-s" data-act="delivered" data-id="' + id + '">تم التسليم</button>';
+    if (o.status === 'new') return '<button type="button" class="btn-s" data-act="assign" data-id="' + id + '">تعيين كابتن</button><button type="button" class="btn-s ' + (o.urgent ? 'warn' : 'alt') + '" data-act="urgent" data-id="' + id + '">' + (o.urgent ? 'عاجل ✓' : 'عاجل') + '</button><button type="button" class="btn-s dng" data-act="cancel" data-id="' + id + '">إلغاء</button>';
+    /* الطلبات اليدوية وطلبات المتاجر تُلغى حتى بعد إسنادها لكابتن، ويصله تنبيه فوري */
+    const cx = !HWOrders.isMarket(o) ? '<button type="button" class="btn-s dng" data-act="cancel" data-id="' + id + '">إلغاء</button>' : '';
+    if (o.status === 'accepted') return '<button type="button" class="btn-s" data-act="picked" data-id="' + id + '">تم الاستلام من المتجر</button><button type="button" class="btn-s alt" data-act="assign" data-id="' + id + '">تغيير الكابتن</button>' + cx;
+    if (o.status === 'picked') return '<button type="button" class="btn-s" data-act="delivered" data-id="' + id + '">تم التسليم</button>' + cx;
     return '';
 }
 function applyFilter(list, f) {
@@ -596,7 +619,7 @@ function renderSheet(id) {
     if (o.rating) rows.push(['تقييم العميل', 'المتجر ' + HWBiz.stars(o.rating.store) + (o.rating.captain ? ' · الكابتن ' + HWBiz.stars(o.rating.captain) : '') + (o.rating.comment ? ' · ' + o.rating.comment : '')]);
     if (o.status === 'delivered' && HWOrders.isMarket(o)) rows.push(['رمز التسليم', o.pinOk === false ? 'سُلّم بدون رمز ⚠' : 'تم التحقق ✓']);
     body.innerHTML =
-        '<div class="sh-head"><div><small>تفاصيل الطلب</small><h3>' + HWOrders.esc(o.code) + '</h3></div><span class="oc-chip">' + HWOrders.SHORT[o.status] + '</span></div>' +
+        '<div class="sh-head"><div><small dir="ltr">' + HWOrders.esc(o.code) + '</small><h3>طلب ' + HWOrders.esc(HWOrders.shortNo(o)) + '</h3></div><span class="oc-chip">' + HWOrders.SHORT[o.status] + '</span></div>' +
         '<div class="s-' + o.status + '">' + HWOrders.routeRows(o) + '</div>' +
         HWOrders.timeline(o) + HWOrders.captainRow(o, true) +
         '<div class="sh-rows">' + rows.map(r => '<div><span>' + r[0] + '</span><b>' + HWOrders.esc(r[1]) + '</b></div>').join('') + '</div>' +
@@ -616,7 +639,7 @@ function captainBook() {
 function openAssign(id) {
     const o = HWOrders.get(id); if (!o) return;
     assignId = id;
-    document.getElementById('asSummary').innerHTML = '<div class="rt"><i></i><small>الطلب</small><b>' + HWOrders.esc(o.code) + ' · ' + HWOrders.esc(o.storeName) + '</b></div>' +
+    document.getElementById('asSummary').innerHTML = '<div class="rt"><i></i><small>الطلب</small><b>' + HWOrders.esc(HWOrders.shortNo(o)) + ' · ' + HWOrders.esc(o.storeName) + '</b></div>' +
         '<div class="rt end"><i></i><small>' + (o.to ? 'إلى' : 'استلام من') + '</small><b>' + HWOrders.esc(o.to || o.from) + '</b></div>' + (o.price ? '<div class="rt-price">' + HWOrders.esc(o.price) + ' دينار</div>' : '');
     document.getElementById('capList').innerHTML = Object.keys(captainBook()).map(n => '<option value="' + HWOrders.esc(n) + '"></option>').join('');
     document.getElementById('asName').value = o.captain ? o.captain.name : '';
@@ -647,7 +670,7 @@ function submitAssign() {
     if (changing) patch.reassigns = (o.reassigns || []).concat([{ from: o.captain.name, to: name, reason, at: Date.now(), by: actorName() }]);
     HWOrders.update(o.id, patch, changing ? 'reassigned' : null);
     logAct(changing ? 'reassign' : 'assign', (changing ? 'نقل الطلب ' + o.code + ' من ' + o.captain.name + ' إلى ' + name + ' — ' + reason : 'إسناد الطلب ' + o.code + ' إلى ' + name));
-    closeAssign(); buzz(18); HWOrders.toast('تم تعيين الكابتن ' + name + ' للطلب ' + o.code);
+    closeAssign(); buzz(18); HWOrders.toast('تم تعيين الكابتن ' + name + ' للطلب ' + HWOrders.shortNo(o));
 }
 
 /* إجراءات الحالة */
@@ -655,9 +678,10 @@ function orderAct(act, id) {
     const o = HWOrders.get(id); if (!o) return;
     if (act === 'assign') return openAssign(id);
     if (act === 'fee') return openFee(id);
+    if (act === 'urgent') { HWOrders.update(id, { urgent: !o.urgent, offerTo: null, offerAt: 0 }, o.urgent ? null : 'urgent'); logAct('urgent', (o.urgent ? 'إلغاء أولوية ' : 'أولوية عاجلة للطلب ') + o.code); HWOrders.toast(o.urgent ? 'أُلغيت الأولوية' : 'الطلب عاجل: يتقدم على كل الطلبات'); if (openSheetId === id) renderSheet(id); return; }
     if (act === 'cancel') {
-        const why = prompt('سبب إلغاء الطلب ' + o.code + ':', 'طلب العميل'); if (why === null) return;
-        HWOrders.update(id, { status: 'cancelled', cancelReason: 'ألغت الإدارة الطلب' + (why ? ' (' + why + ')' : '') }); logAct('cancel', 'إلغاء الطلب ' + o.code + (why ? ' — ' + why : '')); HWOrders.toast('تم إلغاء الطلب'); return;
+        const why = prompt('سبب إلغاء الطلب ' + HWOrders.shortNo(o) + (o.captain && o.captain.name ? ' (مع الكابتن ' + o.captain.name + ')' : '') + ':', 'طلب العميل'); if (why === null) return;
+        HWOrders.update(id, { status: 'cancelled', cancelledAfter: o.status !== 'new' ? o.status : null, cancelReason: 'ألغت الإدارة الطلب' + (why ? ' (' + why + ')' : '') }); logAct('cancel', 'إلغاء الطلب ' + o.code + (why ? ' — ' + why : '')); closeOrderSheet(); HWOrders.toast('تم إلغاء الطلب ' + HWOrders.shortNo(o)); return;
     }
     if (act === 'picked') { HWOrders.update(id, { status: 'picked' }); logAct('status', 'تسجيل استلام الطلب ' + o.code + ' يدويًا'); HWOrders.toast('تم تسجيل استلام الطلب ' + o.code); }
     if (act === 'delivered') { HWOrders.update(id, { status: 'delivered' }); logAct('status', 'تسجيل تسليم الطلب ' + o.code + ' يدويًا'); HWOrders.toast('تم تسليم الطلب ' + o.code + ' ✓'); }

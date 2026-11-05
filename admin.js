@@ -115,7 +115,7 @@ function setupHtml() {
 function needHtml() {
     const l = needsAttention(), setup = setupHtml();
     if (setup) return setup + (l.length ? '<div class="need"><b class="need-h">يحتاج تدخلك</b><div class="need-row">' + l.map(x => '<button type="button" class="need-c ' + x[0] + '" onclick="' + x[3] + '"><b>' + x[1] + '</b><small>' + AE(x[2]) + '</small></button>').join('') + '</div></div>' : '');
-    if (!l.length) return '<div class="need ok"><span class="need-ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><b>كل شيء يسير كما يجب</b></div>';
+    if (!l.length) return '<div class="need-line"><i></i>لا شيء يحتاج تدخلك الآن</div>';
     return '<div class="need"><b class="need-h">يحتاج تدخلك</b><div class="need-row">' + l.map(x => '<button type="button" class="need-c ' + x[0] + '" onclick="' + x[3] + '"><b>' + x[1] + '</b><small>' + AE(x[2]) + '</small></button>').join('') + '</div></div>';
 }
 /* الفرق عن أمس في نفس الوقت من اليوم */
@@ -144,8 +144,9 @@ function storeQuality() {
 function renderKpis() {
     const box = A$('kpiBox'); if (!box) return;
     const k = kpis(HWBiz.periodStart('day')), y = kpisYesterday(), live = capsCol.list().filter(isLive).length, open = issuesCol.list().filter(i => i.status !== 'resolved').length;
-    if (!allOrders.length) { box.innerHTML = needHtml(); return; }   /* اليوم الأول: قائمة البداية فقط بدل بطاقات أصفار */
-    box.innerHTML = needHtml() + '<div class="kpi-grid">' +
+    renderLive();
+    if (!allOrders.length) { box.innerHTML = '<div class="kpi-none">تظهر الأرقام هنا بعد أول طلب</div>'; return; }
+    box.innerHTML = '<div class="kpi-grid">' +
         '<div class="kpi hot" data-stat="k-n"><small>طلبات اليوم</small><b>' + k.n + '</b><em>' + k.done + ' مسلّمة</em>' + delta(k.n, y.n) + '</div>' +
         '<div class="kpi" data-stat="k-min"><small>متوسط وقت التوصيل</small><b>' + (k.avgMin || '—') + '</b><em>دقيقة</em></div>' +
         '<div class="kpi" data-stat="k-gmv"><small>قيمة الطلبات (GMV)</small><b>' + AM(k.gmv) + '</b><em>د.أ</em>' + delta(k.gmv, y.gmv, 1) + '</div>' +
@@ -165,7 +166,7 @@ function renderOpsMap() {
     if (sig === opsSig) return; opsSig = sig; opsLayer.clearLayers(); const pts = [];
     /* حالة طلبات كل متجر تظهر على إطار شعاره: أحمر بانتظار كابتن، فيروزي الكابتن في الطريق للمتجر، داكن في الطريق للعميل */
     const stOf = storeStates(act);
-    stores.forEach(x => { pts.push(x.p); L.marker(x.p, { icon: HWMap.ICON.store(x.id, stOf[x.id]), zIndexOffset: stOf[x.id] ? 300 : 100 }).bindTooltip(x.name, { direction: 'top' }).addTo(opsLayer); });
+    stores.forEach(x => { pts.push(x.p); L.marker(x.p, { icon: HWMap.ICON.store(x.id, stOf[x.id]), zIndexOffset: stOf[x.id] ? 300 : 100 }).bindTooltip(x.name, { direction: 'top' }).on('click', () => focusStore(x.id)).addTo(opsLayer); });
     caps.forEach(c => { const p = [c.lat, c.lng]; pts.push(p); L.marker(p, { icon: HWMap.ICON.cap(), zIndexOffset: 400 }).bindTooltip(c.name, { direction: 'top' }).addTo(opsLayer); });
     const COLOR = { n: '#EF0000', a: '#25CED1', p: '#0E3A3B' }, pinned = {}; stores.forEach(x => { pinned[x.id] = 1; });
     act.forEach(o => {
@@ -187,6 +188,80 @@ function storeStates(act) {
 function storePins() { return HWBiz.storeList().map(s => { const st = stCol.get(s.id) || {}; return st.lat != null ? { id: s.id, name: s.name, p: [st.lat, st.lng] } : null; }).filter(Boolean); }
 stCol.subscribe(() => { opsSig = ''; try { renderOpsMap(); } catch (e) {} });
 function renderHome() { renderKpis(); renderOpsMap(); }
+
+/* =========================================================
+   العمليات الحية (الرئيسية): يحتاج تدخلك ← الطلبات حسب المرحلة بعدّاد ملوّن
+   مثل لوحات الشركات الكبرى: الاستثناء أولًا، وكل إجراء من مكانه
+   ========================================================= */
+const STAGES = [
+    { k: 'n', t: 'بانتظار كابتن', f: o => o.status === 'new', since: o => o.scheduledFor ? HWOrders.dispatchAt(o) : o.createdAt, warn: 3, late: 5 },
+    { k: 'a', t: 'الكابتن متجه للمطعم', f: o => o.status === 'accepted', since: o => stepAt(o, 'accepted') || o.createdAt, warn: 12, late: 20 },
+    { k: 'p', t: 'في طريقه للعميل', f: o => o.status === 'picked', since: o => stepAt(o, 'picked') || o.createdAt, warn: o => (o.routeMin || 15), late: o => (o.routeMin || 15) + 10 }
+];
+let liveStore = '';
+function stepAt(o, s) { const h = (o.history || []).filter(x => x.s === s).pop(); return h ? h.t : 0; }
+function minsSince(t) { return Math.max(0, Math.floor((Date.now() - t) / 60000)); }
+function bestCap(o) {
+    const busy = busyIds(), free = capsCol.list().filter(c => isLive(c) && !busy[c.id] && !c.overLimit && (o.offered || []).indexOf(c.id) < 0);
+    return free.length ? rank(free, o)[0] : null;
+}
+function liveCard(o, st) {
+    const m = minsSince(st.since(o)), w = typeof st.warn === 'function' ? st.warn(o) : st.warn, l = typeof st.late === 'function' ? st.late(o) : st.late;
+    const tone = m >= l ? 'late' : m >= w ? 'warn' : '';
+    let line = '', act = '';
+    if (st.k === 'n') {
+        line = o.urgent ? '<b class="lv-urg">عاجل</b> · ' : '';
+        line += o.offerAll ? 'معروض على كل الكباتن' : o.offerTo ? 'يُعرض على ' + AE(o.offerName || '') + (o.offerWhy ? ' · ' + AE(o.offerWhy) : '') : HWOrders.isMarket(o) && o.storeState === 'pending' ? 'بانتظار قبول المطعم' : 'يبحث عن كابتن';
+        const c = bestCap(o);
+        act = c ? '<button type="button" class="lv-go" data-qa="' + AE(o.id) + '" data-cap="' + AE(c.id) + '"><img src="' + AE(HWBiz.capAv(c)) + '" alt="">أسند لـ ' + AE(String(c.name).split(' ')[0]) + '</button>' : '<button type="button" class="lv-go alt" data-act="assign" data-id="' + AE(o.id) + '">تعيين</button>';
+    } else {
+        const cp = o.captain || {}, ph = cp.phone ? String(cp.phone).replace(/[^\d+]/g, '') : '';
+        line = '<img class="lv-av" src="' + AE(HWBiz.capAv(cp)) + '" alt="">' + AE(cp.name || '') + (cp.num ? ' <span class="cap-no" dir="ltr">' + AE(cp.num) + '</span>' : '');
+        act = ph ? '<a class="lv-call" href="tel:' + AE(ph) + '" aria-label="اتصال بالكابتن" onclick="event.stopPropagation()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2Z"/></svg></a>' : '';
+    }
+    const fee = !HWOrders.isMarket(o) && !(HWOrders.settle(o).fee > 0) ? '<span class="lv-tag">بلا أجرة</span>' : '';
+    return '<div class="lv-c ' + st.k + (o.urgent ? ' urg' : '') + '" data-lv="' + AE(o.id) + '"><div class="lv-top"><b class="lv-no" dir="ltr">' + AE(HWOrders.shortNo(o)) + '</b><span class="lv-st">' + AE(o.storeName || o.from || '—') + '</span>' + fee +
+        '<span class="lv-t ' + tone + '">' + m + ' د</span></div><div class="lv-bot"><span class="lv-l">' + line + (o.to ? ' · <span class="lv-to">' + AE(o.to) + '</span>' : '') + '</span>' + act + '</div></div>';
+}
+function renderLive() {
+    const box = A$('liveBox'); if (!box) return;
+    const q = (A$('opsQ') && A$('opsQ').value || '').trim().replace(/^#/, '');
+    let act = allOrders.filter(HWOrders.isActive);
+    if (liveStore) act = act.filter(o => o.storeId === liveStore);
+    let found = [];
+    if (q) {
+        const mt = o => (o.code || '').indexOf(q) >= 0 || HWOrders.shortNo(o).indexOf(q) >= 0 || (o.storeName || o.from || '').indexOf(q) >= 0 || (o.captain && (o.captain.name || '').indexOf(q) >= 0);
+        found = allOrders.filter(o => !HWOrders.isActive(o) && HWOrders.isToday(o.createdAt) && mt(o)).slice(0, 8);
+        act = act.filter(mt);
+    }
+    const capsLive = capsCol.list().filter(isLive), busy = busyIds(), free = capsLive.filter(c => !busy[c.id]).length;
+    if (A$('opsSum')) A$('opsSum').textContent = act.length + ' طلب نشط · ' + free + ' كابتن متاح من ' + capsLive.length;
+    let h = q ? '' : needHtml();
+    if (liveStore) h += '<button type="button" class="lv-filter" onclick="liveStore=\'\';renderLive()">طلبات ' + AE(storeName(liveStore)) + ' فقط · إظهار الكل ✕</button>';
+    STAGES.forEach(st => {
+        const l = HWOrders.prioritySort(act.filter(st.f));
+        if (!l.length) return;
+        h += '<div class="lv-g ' + st.k + '"><div class="lv-gh"><i></i>' + st.t + '<em>' + l.length + '</em></div>' + l.map(o => liveCard(o, st)).join('') + '</div>';
+    });
+    if (!act.length && !q) h += '<div class="lv-empty">لا توجد طلبات جارية الآن' + (free ? ' · ' + free + ' كابتن بانتظار الطلبات' : '') + '</div>';
+    if (q && !act.length && !found.length) h += '<div class="lv-empty">لا يوجد طلب بهذا الرقم أو الاسم اليوم</div>';
+    if (found.length) h += '<div class="lv-g"><div class="lv-gh"><i class="d"></i>طلبات منتهية اليوم</div>' + found.map(o => '<div class="lv-c done" data-lv="' + AE(o.id) + '"><div class="lv-top"><b class="lv-no" dir="ltr">' + AE(HWOrders.shortNo(o)) + '</b><span class="lv-st">' + AE(o.storeName || o.from || '') + '</span><span class="lv-t">' + AE(HWOrders.SHORT[o.status]) + '</span></div></div>').join('') + '</div>';
+    box.innerHTML = h;
+}
+/* إسناد بضغطة واحدة لأفضل كابتن (نفس ترتيب الإسناد التلقائي) */
+function quickAssign(oid, cid) {
+    const o = HWOrders.get(oid), c = capsCol.get(cid); if (!o || !c || o.status !== 'new') return;
+    const eta = new Date(Date.now() + 20 * 60000);
+    HWOrders.update(oid, { status: 'accepted', captain: { id: c.id, num: c.num || '', name: c.name, phone: c.phone || '', av: c.av === 'f' ? 'f' : 'm', pv: c.pv || 0 }, claimBy: c.id, offerTo: null, offerAt: 0, offerAll: false, eta: formatTime12h(String(eta.getHours()).padStart(2, '0') + ':' + String(eta.getMinutes()).padStart(2, '0')) });
+    logAct('assign', 'إسناد الطلب ' + o.code + ' إلى ' + c.name + ' (ضغطة واحدة)'); buzz(18); HWOrders.toast('أُسند ' + HWOrders.shortNo(o) + ' إلى ' + c.name);
+}
+document.addEventListener('click', (e) => {
+    const qa = e.target.closest('[data-qa]'); if (qa) { e.stopPropagation(); quickAssign(qa.dataset.qa, qa.dataset.cap); return; }
+    const lv = e.target.closest('[data-lv]'); if (lv && !e.target.closest('[data-act],a')) openOrderSheet(lv.dataset.lv);
+});
+setInterval(() => { if (!document.hidden && scr() === 'screen-dashboard') renderLive(); }, 20000);
+/* الضغط على شعار متجر في الخريطة: طلباته الجارية فقط */
+function focusStore(id) { liveStore = id; renderLive(); const b = A$('liveBox'); if (b) window.scrollTo({ top: b.getBoundingClientRect().top + window.scrollY - 140, behavior: 'smooth' }); }
 
 /* =========================================================
    3) تسوية الكباتن

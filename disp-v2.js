@@ -118,15 +118,17 @@ function busyIds() { const b = {}; allOrders.forEach(o => { if (o.captain && o.c
 function offerLim() { return (HW_CONFIG.offerSeconds || 45) * 1000; }
 function liveOfferTo(skipId) { const t = {}; allOrders.forEach(o => { if (o.id !== skipId && o.offerTo && Date.now() - (o.offerAt || 0) < offerLim() + 2000 && HWOrders.offerable(o)) t[o.offerTo] = 1; }); return t; }
 function distTo(c, o) { return c.lat != null && o.storeLoc ? HWMap.est([c.lat, c.lng], [o.storeLoc.lat, o.storeLoc.lng]) : null; }
-function rank(list, o) {
-    return list.slice().sort((a, b) => { const da = distTo(a, o), db = distTo(b, o); if (da != null && db != null) return da - db; if (da != null) return -1; if (db != null) return 1; return (a.lastSeen || 0) - (b.lastSeen || 0); });
-}
+/* الترتيب المشترك مع تطبيق الكابتن: الأقرب، مع العدل بين المتقاربين (الأطول انتظارًا) وتأخير كثير الرفض */
+function rank(list, o) { return HWOrders.rankCaptains(list, o); }
+var BROADCAST_MIN = 5;   /* بعد 5 دقائق بلا كابتن: يُعرض الطلب على كل الكباتن المتاحين معًا (var: يُستخدم قبل هذا السطر عند التشغيل) */
 function runEngine() {
     if (!autoOn || engineBusy) return; engineBusy = true;
     try {
         const now = Date.now(), caps = capsCol.list();
-        allOrders.filter(o => HWOrders.offerable(o)).forEach(o => {
+        HWOrders.prioritySort(allOrders.filter(o => HWOrders.offerable(o))).forEach(o => {
+            if (o.offerAll) return;                                                                  // معروض على الجميع
             if (o.offerTo && now - (o.offerAt || 0) < offerLim() + 2000) return;                  // عرض ما زال ساريًا
+            if (!o.urgent && now - (o.scheduledFor ? HWOrders.dispatchAt(o) : o.createdAt) > (BROADCAST_MIN || 5) * 60000) { HWOrders.update(o.id, { offerAll: true, offerTo: null, offerAt: 0 }, 'offer_all'); return; }
             const offered = (o.offered || []).slice();
             if (o.offerTo && offered.indexOf(o.offerTo) < 0) offered.push(o.offerTo);            // انتهت مهلته
             const busy = busyIds(), pend = liveOfferTo(o.id);
@@ -134,8 +136,8 @@ function runEngine() {
             if (!cands.length && offered.length && o.declinedAt && now - o.declinedAt < 30000) return;   // رُفض للتو: مهلة قبل إعادة العرض
             if (!cands.length && offered.length) { HWOrders.update(o.id, { offerTo: null, offerAt: 0, offered: [] }); return; }   // دورة جديدة
             if (!cands.length) { if (o.offerTo) HWOrders.update(o.id, { offerTo: null, offerAt: 0 }); return; }
-            const c = rank(cands, o)[0], d = distTo(c, o);
-            HWOrders.update(o.id, { offerTo: c.id, offerAt: now, offered: offered.concat([c.id]), offerName: c.name, offerKm: d == null ? null : Math.round(d * 10) / 10 }, 'offer_sent');
+            const c = rank(cands, o)[0], d = c._km;
+            HWOrders.update(o.id, { offerTo: c.id, offerAt: now, offered: offered.concat([c.id]), offerName: c.name, offerKm: d == null ? null : Math.round(d * 10) / 10, offerWhy: c._why }, 'offer_sent');
         });
     } finally { engineBusy = false; }
 }
