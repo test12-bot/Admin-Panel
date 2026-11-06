@@ -609,7 +609,7 @@ function renderSheet(id) {
     const o = HWOrders.get(id), body = document.getElementById('orderSheetBody');
     if (!o) { closeOrderSheet(); return; }
     const rows = [['المتجر / المصدر', o.storeName + (o.kind === 'market' ? ' (من التطبيق)' : o.source === 'store' ? ' (طلب من الموقع)' : ' (لوحة الإدارة)')], ['وقت الطلب', HWOrders.fmtTime(o.createdAt)]];
-    if (o.orderValue) rows.push(['قيمة الطلب', o.orderValue + ' د.أ']);
+    if (o.orderValue) rows.push(['قيمة الطلب', HWOrders.valTxt(o.orderValue)]);
     if (o.price) rows.push(['رسوم التوصيل', o.price + ' دينار']);
     if (o.notes) rows.push(['ملاحظات', o.notes]);
     if (o.discount) rows.push(['خصم العرض', '−' + HWOrders.money(o.discount) + ' د.أ' + (o.offerTitle ? ' (' + o.offerTitle + ')' : '')]);
@@ -628,13 +628,12 @@ function renderSheet(id) {
     body.innerHTML =
         '<div class="sh-head"><div><small dir="ltr">' + HWOrders.esc(o.code) + '</small><h3>طلب ' + HWOrders.esc(HWOrders.shortNo(o)) + '</h3></div><span class="oc-chip">' + HWOrders.SHORT[o.status] + '</span></div>' +
         '<div class="s-' + o.status + '">' + HWOrders.routeRows(o) + '</div>' +
-        HWOrders.timeline(o) + HWOrders.captainRow(o, true) +
+        HWOrders.timeline(o, ['pickpic', 'dlvpic']) + HWOrders.captainRow(o, true) +
         '<div class="sh-rows">' + rows.map(r => '<div><span>' + r[0] + '</span><b>' + HWOrders.esc(r[1]) + '</b></div>').join('') + '</div>' +
-        (o.pickPicAt ? '<button type="button" class="pk-thumb" data-pk="' + o.id + '" onclick="showPickPic(\'' + o.id + '\')"><span class="pk-img"></span><span><b>صورة الاستلام من المتجر</b><small>التقطها ' + HWOrders.esc((o.captain || {}).name || 'الكابتن') + ' · ' + HWOrders.fmtTime(o.pickPicAt) + '</small></span></button>' : '') +
         (o.podAt && typeof showPod === 'function' ? '<button type="button" class="ghost-btn wide" style="margin-top:10px" onclick="showPod(\'' + o.id + '\')">صورة إثبات الوصول</button>' : '') +
         (actionsFor(o) ? '<div class="oc-actions" style="margin-top:14px">' + actionsFor(o) + '</div>' : '') +
         '<div class="sh-actions"><button type="button" class="ghost-btn" style="flex:1" onclick="closeOrderSheet()">إغلاق</button></div>';
-    body.className = 'modal-card glass s-' + o.status; loadPickThumbs();
+    body.className = 'modal-card glass s-' + o.status;
 }
 
 /* تعيين كابتن */
