@@ -20,10 +20,11 @@ const SCREEN_META = {
   'screen-board':      { back:'screen-dashboard' },
   'screen-captains':   { back:'screen-dashboard' },
   'screen-support':    { back:'screen-dashboard' },
+  'screen-stats':      { back:'screen-dashboard' },
 };
 
 /* التبويب النشط لكل شاشة */
-const TAB_OF = { 'screen-dashboard': 'home', 'screen-restaurants': 'home', 'screen-order': 'home', 'screen-board': 'board', 'screen-captains': 'caps', 'screen-support': 'support' };
+const TAB_OF = { 'screen-stats': 'home', 'screen-dashboard': 'home', 'screen-restaurants': 'home', 'screen-order': 'home', 'screen-board': 'board', 'screen-captains': 'caps', 'screen-support': 'support' };
 let state = { pickup:{ name:"", isCustom:false, sid:'' } };
 let currentScreen = 'screen-dashboard';
 
@@ -325,6 +326,7 @@ function goTo(id){
   window.scrollTo({ top:0, behavior:'auto' });
   // كل صفحة تُفتح "نظيفة" كأنها حُمّلت من جديد
   if (id === 'screen-support') renderSupport();
+  if (id === 'screen-stats' && typeof renderStatsPage === 'function') renderStatsPage();
 }
 
 function goBack(){
@@ -576,42 +578,7 @@ function onOrders(list) {
     renderBoard();
 }
 
-/* =========================================================
-   لوحة الطلبات بشكل جدول تداول: صف لكل طلب، أرقام بعرض ثابت،
-   ومضة لونية عند تغير حالة الطلب (مثل تغير سعر السهم)، وترتيب بالضغط على رأس العمود
-   ========================================================= */
-let bdPrev = null, bdSortK = '', bdSortDir = -1;
 function doneAt(o) { const h = (o.history || []).filter(x => x.s === 'delivered').pop(); return h ? h.t : o.status === 'delivered' ? o.updatedAt : 0; }
-function boardSort(list) {
-    if (!bdSortK) return bdFilter === 'live' || bdFilter === 'new' ? HWOrders.prioritySort(list) : list.slice().sort((a, b) => b.createdAt - a.createdAt);
-    const v = o => bdSortK === 'fee' ? (HWOrders.settle(o).fee || 0) : bdSortK === 'age' ? o.createdAt : bdSortK === 'no' ? (o.dayNo || o.createdAt) : 0;
-    return list.slice().sort((a, b) => (v(a) - v(b)) * bdSortDir);
-}
-function ageOf(o) {
-    if (o.status === 'delivered' && doneAt(o)) return { t: Math.max(1, Math.round((doneAt(o) - o.createdAt) / 60000)) + ' د', c: 'fin' };
-    if (o.status === 'cancelled') return { t: HWOrders.fmtTime(o.createdAt).replace(/ [صم]$/, ''), c: 'fin' };
-    const m = Math.max(0, Math.floor((Date.now() - o.createdAt) / 60000)), lim = o.status === 'new' ? [3, 6] : [30, 45];
-    return { t: m < 60 ? m + ' د' : Math.floor(m / 60) + ' س', c: m >= lim[1] ? 'late' : m >= lim[0] ? 'warn' : '' };
-}
-function boardTable(list) {
-    const H = HWOrders.esc, th = (k, t, cls) => '<button type="button" class="bt-h ' + (cls || '') + (k && bdSortK === k ? ' on' : '') + '" ' + (k ? 'data-sort="' + k + '"' : 'disabled') + '>' + t + (k && bdSortK === k ? (bdSortDir < 0 ? ' ↓' : ' ↑') : '') + '</button>';
-    return '<div class="bt" role="table"><div class="bt-r bt-hd" role="row">' + th('no', 'الطلب') + th('', 'المسار') + th('', 'الكابتن', 'c-cap') + th('', 'القيمة', 'c-val') + th('fee', 'الأجرة', 'num') + th('age', 'الوقت', 'num') + '</div>' +
-        list.slice(0, 300).map(o => {
-            const cp = o.captain || {}, fee = HWOrders.settle(o).fee, a = ageOf(o), ch = bdPrev && bdPrev[o.id] !== o.status ? (bdPrev[o.id] ? ' tick' : ' tick-new') : '';
-            return '<div class="bt-r s-' + o.status + (o.urgent ? ' urg' : '') + ch + '" role="row" tabindex="0" data-bt="' + H(o.id) + '">' +
-                '<span class="c-no"><b dir="ltr">' + H(HWOrders.shortNo(o)) + '</b><small>' + H(HWOrders.SHORT[o.status] || '') + '</small></span>' +
-                '<span class="c-rt"><b>' + H(o.storeName || o.from || '—') + '</b><small>' + (o.to ? '← ' + H(o.to) : HWOrders.isMarket(o) ? '← ' + H((o.address && (o.address.label || o.address.area)) || 'عميل') : '<i class="tbd">بلا وجهة</i>') + '</small></span>' +
-                '<span class="c-cap">' + (cp.name ? '<img src="' + H(HWBiz.capAv(cp)) + '" alt=""><em>' + H(String(cp.name).split(' ')[0]) + '</em>' : '<em class="none">—</em>') + '</span>' +
-                '<span class="c-val num">' + (o.orderValue ? H(HWOrders.money(Number(o.orderValue))) : '—') + '</span>' +
-                '<span class="num c-fee">' + (fee > 0 ? H(HWOrders.money(fee)) : '<i class="tbd">لاحقًا</i>') + '</span>' +
-                '<span class="num c-age ' + a.c + '">' + a.t + '</span></div>';
-        }).join('') + '</div>' + (list.length > 300 ? '<p class="bt-more">يظهر أحدث 300 طلب</p>' : '');
-}
-document.addEventListener('click', e => {
-    const h = e.target.closest('.bt-h[data-sort]'); if (h) { const k = h.dataset.sort; if (bdSortK === k) { if (bdSortDir < 0) bdSortDir = 1; else { bdSortK = ''; bdSortDir = -1; } } else { bdSortK = k; bdSortDir = -1; } buzz(); renderBoard(); return; }
-    const r = e.target.closest('[data-bt]'); if (r) { buzz(); openOrderSheet(r.dataset.bt); }
-});
-document.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.dataset && e.target.dataset.bt) { e.preventDefault(); openOrderSheet(e.target.dataset.bt); } });
 setInterval(() => { if (!document.hidden && document.querySelector('#screen-board.active')) renderBoard(); }, 30000);
 function renderBoard() {
     const st = HWOrders.stats(allOrders), act = allOrders.filter(HWOrders.isActive), running = st.active - st.fresh;
@@ -619,33 +586,25 @@ function renderBoard() {
     const badge = document.getElementById('tabBadge');
     if (badge) { badge.textContent = fresh.length; badge.classList.toggle('on', fresh.length > 0); }
 
-    /* شريط مؤشرات مثل شاشات التداول: الرقم، والفرق عن أمس في نفس الساعة */
-    const bs = document.getElementById('bdStats');
-    if (bs) {
-        const y0 = new Date(); y0.setHours(0, 0, 0, 0); const yS = y0.getTime() - 864e5, yE = Date.now() - 864e5;
-        const yl = allOrders.filter(o => o.createdAt >= yS && o.createdAt <= yE), yN = yl.length, yD = yl.filter(o => o.status === 'delivered').length;
-        const tl = allOrders.filter(o => HWOrders.isToday(o.createdAt)), gmv = tl.filter(o => o.status === 'delivered').reduce((a, o) => a + (Number(o.orderValue) || HWOrders.settle(o).items || 0), 0);
-        const dmin = tl.filter(o => o.status === 'delivered' && doneAt(o)).map(o => (doneAt(o) - o.createdAt) / 60000), avg = dmin.length ? Math.round(dmin.reduce((a, b) => a + b, 0) / dmin.length) : 0;
-        const dl = (n, y) => { const d = n - y; return d ? '<i class="' + (d > 0 ? 'up' : 'dn') + '">' + (d > 0 ? '▲' : '▼') + Math.abs(d) + '</i>' : '<i>—</i>'; };
-        bs.className = 'tk-strip';
-        bs.innerHTML = [['طلبات اليوم', st.today, dl(st.today, yN)], ['بانتظار كابتن', st.fresh, '', st.fresh ? 'hot' : ''], ['قيد التنفيذ', running, ''], ['مسلّمة', st.delivered, dl(st.delivered, yD)], ['ملغاة', st.cancelled, '', st.cancelled ? 'warn' : ''], ['أجور اليوم', HWOrders.money(st.fees), ''], ['قيمة الطلبات', HWOrders.money(gmv), ''], ['متوسط التوصيل', avg ? avg + ' د' : '—', '']]
-            .map(x => '<div class="tk ' + (x[3] || '') + '"><small>' + x[0] + '</small><b dir="ltr">' + x[1] + '</b>' + x[2] + '</div>').join('');
-    }
+    /* الأرقام في صفحة الإحصائيات (بلا تكرار هنا): هذه الصفحة للعمل على الطلبات فقط */
+    const bs = document.getElementById('bdStats'); if (bs) { bs.innerHTML = ''; bs.hidden = true; }
     document.querySelectorAll('#bdSeg button').forEach(b => {
         const f = b.dataset.f, n = applyFilter(allOrders, f).length;
         b.classList.toggle('on', f === bdFilter);
         b.innerHTML = b.textContent.replace(/\d+$/, '').trim() + '<i>' + n + '</i>';
     });
-    const list = boardSort(applyFilter(allOrders, bdFilter));
+    const list = bdFilter === 'live' || bdFilter === 'new' ? HWOrders.prioritySort(applyFilter(allOrders, bdFilter)) : applyFilter(allOrders, bdFilter).sort((a, b) => b.createdAt - a.createdAt);
     const bl = document.getElementById('bdList');
-    if (bl) bl.innerHTML = list.length ? boardTable(list) : '<div class="empty-orders">' + iconBox + 'لا توجد طلبات هنا الآن</div>';
-    bdPrev = {}; allOrders.forEach(o => { bdPrev[o.id] = o.status; });
+    if (bl) bl.innerHTML = list.length ? list.slice(0, 200).map(o => HWOrders.card(o, actionsFor(o), true)).join('') : '<div class="empty-orders">' + iconBox + 'لا توجد طلبات هنا الآن</div>';
     if (openSheetId) renderSheet(openSheetId);
 }
 
 /* تفاصيل الطلب */
 function openOrderSheet(id) { openSheetId = id; renderSheet(id); document.getElementById('orderSheet').classList.add('show'); }
 function closeOrderSheet() { openSheetId = null; const s = document.getElementById('orderSheet'); if (s) s.classList.remove('show'); }
+/* صورة الاستلام تظهر مصغرة داخل تفاصيل الطلب فور وصولها */
+const pkCache = {};
+function loadPickThumbs() { document.querySelectorAll('[data-pk]').forEach(b => { const id = b.dataset.pk, put = d => { const i = b.querySelector('.pk-img'); if (i && d && d.data) i.style.backgroundImage = 'url(' + d.data + ')'; }; if (pkCache[id]) return put(pkCache[id]); HWBiz.getDoc('pickpic', id).then(d => { if (d) { pkCache[id] = d; put(d); } }); }); }
 function renderSheet(id) {
     const o = HWOrders.get(id), body = document.getElementById('orderSheetBody');
     if (!o) { closeOrderSheet(); return; }
@@ -671,10 +630,11 @@ function renderSheet(id) {
         '<div class="s-' + o.status + '">' + HWOrders.routeRows(o) + '</div>' +
         HWOrders.timeline(o) + HWOrders.captainRow(o, true) +
         '<div class="sh-rows">' + rows.map(r => '<div><span>' + r[0] + '</span><b>' + HWOrders.esc(r[1]) + '</b></div>').join('') + '</div>' +
+        (o.pickPicAt ? '<button type="button" class="pk-thumb" data-pk="' + o.id + '" onclick="showPickPic(\'' + o.id + '\')"><span class="pk-img"></span><span><b>صورة الاستلام من المتجر</b><small>التقطها ' + HWOrders.esc((o.captain || {}).name || 'الكابتن') + ' · ' + HWOrders.fmtTime(o.pickPicAt) + '</small></span></button>' : '') +
         (o.podAt && typeof showPod === 'function' ? '<button type="button" class="ghost-btn wide" style="margin-top:10px" onclick="showPod(\'' + o.id + '\')">صورة إثبات الوصول</button>' : '') +
         (actionsFor(o) ? '<div class="oc-actions" style="margin-top:14px">' + actionsFor(o) + '</div>' : '') +
         '<div class="sh-actions"><button type="button" class="ghost-btn" style="flex:1" onclick="closeOrderSheet()">إغلاق</button></div>';
-    body.className = 'modal-card glass s-' + o.status;
+    body.className = 'modal-card glass s-' + o.status; loadPickThumbs();
 }
 
 /* تعيين كابتن */

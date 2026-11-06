@@ -72,12 +72,15 @@ function statDetail(key) {
     }
 }
 /* يحتاج تدخلك: الاستثناءات أولًا (مثل لوحات Onfleet وUber) — كل بند يفتح مكانه */
+const lateSeen = {};
 function needsAttention() {
     const now = Date.now(), act = allOrders.filter(HWOrders.isActive), t = (o, s) => { const h = (o.history || []).filter(x => x.s === s)[0]; return h ? h.t : 0; };
-    const due = o => o.scheduledFor ? HWOrders.dispatchAt(o) : o.createdAt;
+    const due = o => o.scheduledFor ? HWOrders.dispatchAt(o) : o.readyAt ? Math.max(o.createdAt, o.readyAt - 10 * 60000) : o.createdAt;
     const pend = act.filter(o => HWOrders.isMarket(o) && o.storeState === 'pending' && now - o.createdAt > 3 * 60000);
     const noCap = act.filter(o => o.status === 'new' && !o.captain && (!HWOrders.isMarket(o) || o.storeState !== 'pending') && now - due(o) > 5 * 60000 && due(o) <= now);
-    const late = act.filter(o => o.status !== 'new' && now - due(o) > ((o.prepMin || 20) + (o.routeMin || 15) + 15) * 60000);
+    /* متأخر = تجاوز الوقت الموعود لحظة قبول الكابتن بخمس دقائق (وإلا القاعدة التقريبية القديمة) */
+    const late = act.filter(o => o.status !== 'new' && (o.etaAt ? now > o.etaAt + 5 * 60000 : now - due(o) > ((o.prepMin || 20) + (o.routeMin || 15) + 15) * 60000));
+    late.forEach(o => { if (lateSeen[o.id]) return; lateSeen[o.id] = 1; try { const e = HWOrders.eta(o); HWHead.push('طلب متأخر ' + HWOrders.shortNo(o), (o.storeName || '') + (e && e.late ? ' · متأخر ' + e.late + ' د عن الموعد' : ''), 'board'); if (window.HWNotify) HWNotify.play('status'); } catch (e2) {} });
     const iss = issuesCol.list().filter(i => i.status !== 'resolved').length;
     const lim = capsCol.list().filter(c => c.overLimit && c.active !== false);
     const ns = allOrders.filter(o => o.noShow && HWOrders.isToday(o.updatedAt || o.createdAt)).length;
@@ -87,7 +90,7 @@ function needsAttention() {
         unp.length && ['y', (unp.length === 1 ? 'طلب واحد' : unp.length + ' طلبات') + ' بلا أجرة توصيل', 'اضغط لتسعيره' + (unp.length > 1 ? 'ا واحدًا تلو الآخر' : ''), 'openPricing()'],
         pend.length && ['r', pend.length + ' بانتظار قبول المتجر', 'أكثر من 3 دقائق', "goTo('screen-board')"],
         noCap.length && ['r', noCap.length + ' بلا كابتن', 'أكثر من 5 دقائق', "goTo('screen-board')"],
-        late.length && ['y', late.length + ' متأخر', 'تجاوز الوقت المتوقع', "goTo('screen-board')"],
+        late.length && ['r', (late.length === 1 ? 'طلب متأخر' : late.length + ' طلبات متأخرة'), 'تجاوز الوقت الموعود للعميل', late.length === 1 ? "openOrderSheet('" + late[0].id + "')" : "goTo('screen-board')"],
         iss && ['y', iss + ' بلاغ مفتوح', 'بحاجة لمراجعة', "goTo('screen-issues')"],
         lim.length && ['y', lim.length + ' كابتن تجاوز حد النقد', lim.map(c => c.name).slice(0, 2).join('، '), "tabGo('screen-captains')"],
         noLoc.length && ['y', noLoc.length + ' متجر بلا موقع', 'الكباتن لن يروا مكانه: ' + noLoc.map(x => x.name).slice(0, 2).join('، '), "mgTab='stores';tabGo('screen-manage')"],
@@ -146,15 +149,10 @@ function renderKpis() {
     const k = kpis(HWBiz.periodStart('day')), y = kpisYesterday(), live = capsCol.list().filter(isLive).length, open = issuesCol.list().filter(i => i.status !== 'resolved').length;
     renderLive();
     if (!allOrders.length) { box.innerHTML = '<div class="kpi-none">تظهر الأرقام هنا بعد أول طلب</div>'; return; }
-    box.innerHTML = '<div class="kpi-grid">' +
-        '<div class="kpi hot" data-stat="k-n"><small>طلبات اليوم</small><b>' + k.n + '</b><em>' + k.done + ' مسلّمة</em>' + delta(k.n, y.n) + '</div>' +
-        '<div class="kpi" data-stat="k-min"><small>متوسط وقت التوصيل</small><b>' + (k.avgMin || '—') + '</b><em>دقيقة</em></div>' +
-        '<div class="kpi" data-stat="k-gmv"><small>قيمة الطلبات (GMV)</small><b>' + AM(k.gmv) + '</b><em>د.أ</em>' + delta(k.gmv, y.gmv, 1) + '</div>' +
-        '<div class="kpi" data-stat="k-net"><small>صافي المنصة</small><b>' + AM(k.net) + '</b><em>عمولة ' + AM(k.com) + ' − أكواد ' + AM(k.promo) + '</em>' + delta(k.net, y.net, 1) + '</div>' +
-        '<div class="kpi" data-stat="k-canc"><small>نسبة الإلغاء</small><b>' + k.rate + '٪</b><em>' + k.canc + ' ملغي</em></div>' +
-        '<div class="kpi" data-stat="k-rate"><small>رضا العملاء</small><b>' + k.rating + '</b><em>من 5</em></div>' +
-        '<button type="button" class="kpi" onclick="tabGo(\'screen-captains\')"><small>كباتن متصلون</small><b>' + live + '</b><em>من ' + capsCol.list().length + '</em></button>' +
-        '<button type="button" class="kpi' + (open ? ' warn' : '') + '" onclick="goTo(\'screen-issues\')"><small>بلاغات مفتوحة</small><b>' + open + '</b><em>اضغط للمراجعة</em></button></div>' + storeQuality();
+    /* رقم واحد لليوم يفتح صفحة الإحصائيات (بدل شبكة أرقام مكررة هنا) */
+    const pc = y.n ? Math.round((k.n - y.n) / y.n * 100) : 0;
+    box.innerHTML = '<button type="button" class="hw-hero day-card" onclick="goTo(\'screen-stats\')"><small>طلبات اليوم</small><b>' + k.n + '</b><span>' + (y.n ? (pc > 0 ? '▲ ' : pc < 0 ? '▼ ' : '') + Math.abs(pc) + '٪ عن أمس · ' : '') + k.done + ' مسلّمة · صافي ' + AM(k.net) + ' د.أ</span><em class="dc-go">الإحصائيات</em></button>' +
+        (open ? '<button type="button" class="hw-row iss-row" onclick="goTo(\'screen-issues\')"><span>بلاغات مفتوحة</span><b>' + open + '</b></button>' : '') + storeQuality();
 }
 let opsMap = null, opsLayer = null, opsExtra = null, opsSig = '', opsFitted = false, opsMk = {}, opsPop = null;
 const locAge = c => Date.now() - (c.locAt || c.lastSeen || 0);
@@ -321,7 +319,7 @@ function liveCard(o, st) {
     let line = '', act = '';
     if (st.k === 'n') {
         line = o.urgent ? '<b class="lv-urg">عاجل</b> · ' : '';
-        line += o.offerAll ? 'معروض على كل الكباتن' : o.offerTo ? 'يُعرض على ' + AE(o.offerName || '') + (o.offerWhy ? ' · ' + AE(o.offerWhy) : '') : HWOrders.isMarket(o) && o.storeState === 'pending' ? 'بانتظار قبول المطعم' : 'يبحث عن كابتن';
+        line += o.readyAt && Date.now() < o.readyAt - 10 * 60000 && !o.urgent ? 'جاهز <span dir="ltr">' + HWOrders.clock(o.readyAt) + '</span> · يُرسل الكابتن قبلها بعشر دقائق' : o.offerAll ? 'معروض على كل الكباتن' : o.offerTo ? 'يُعرض على ' + AE(o.offerName || '') + (o.offerWhy ? ' · ' + AE(o.offerWhy) : '') : HWOrders.isMarket(o) && o.storeState === 'pending' ? 'بانتظار قبول المطعم' : 'يبحث عن كابتن';
         const c = bestCap(o);
         act = c ? '<button type="button" class="lv-go" data-qa="' + AE(o.id) + '" data-cap="' + AE(c.id) + '"><img src="' + AE(HWBiz.capAv(c)) + '" alt="">أسند لـ ' + AE(String(c.name).split(' ')[0]) + '</button>' : '<button type="button" class="lv-go alt" data-act="assign" data-id="' + AE(o.id) + '">تعيين</button>';
     } else {
@@ -331,7 +329,7 @@ function liveCard(o, st) {
     }
     const fee = !HWOrders.isMarket(o) && !(HWOrders.settle(o).fee > 0) ? '<span class="lv-tag">بلا أجرة</span>' : '';
     return '<div class="lv-c ' + st.k + (o.urgent ? ' urg' : '') + '" data-lv="' + AE(o.id) + '"><div class="lv-top"><b class="lv-no" dir="ltr">' + AE(HWOrders.shortNo(o)) + '</b><span class="lv-st">' + AE(o.storeName || o.from || '—') + '</span>' + fee +
-        '<span class="lv-t ' + tone + '">' + m + ' د</span></div><div class="lv-bot"><span class="lv-l">' + line + (o.to ? ' · <span class="lv-to">' + AE(o.to) + '</span>' : '') + '</span>' + act + '</div></div>';
+        (() => { const e = st.k !== 'n' ? HWOrders.eta(o) : null; return e ? '<span class="lv-t ' + (e.late ? 'late' : '') + '">' + (e.late ? 'متأخر ' + e.late + ' د' : 'يصل <span dir="ltr">' + HWOrders.clock(e.at) + '</span>') + '</span>' : '<span class="lv-t ' + tone + '">' + m + ' د</span>'; })() + '</div><div class="lv-bot"><span class="lv-l">' + line + (o.to ? ' · <span class="lv-to">' + AE(o.to) + '</span>' : '') + '</span>' + act + '</div></div>';
 }
 function renderLive() {
     const box = A$('liveBox'); if (!box) return;
@@ -422,6 +420,13 @@ function renderIssues() {
                 (i.status === 'resolved' ? '<p class="res">✓ ' + AE(i.resolution || 'تم الحل') + ' — ' + AE(i.resolvedBy || '') + '</p>'
                     : '<div class="btn-row">' + (o ? '<button type="button" class="ghost-btn" onclick="openOrderSheet(\'' + o.id + '\')">الطلب</button>' : '') + (o && o.podAt ? '<button type="button" class="ghost-btn" onclick="showPod(\'' + o.id + '\')">صورة الإثبات</button>' : '') + (i.captain && i.captain.phone ? '<a class="ghost-btn" href="tel:' + AE(i.captain.phone) + '">اتصال</a>' : '') + '<button type="button" class="submit-btn" onclick="resolveIssue(\'' + i.id + '\')"><span class="btn-label">تم الحل</span></button></div>') + '</div>'; }).join('')
             : '<div class="empty-orders">لا توجد بلاغات هنا</div>');
+}
+/* صورة الاستلام: التقطها الكابتن عند استلام الطلب من المتجر */
+function showPickPic(id) {
+    const o = HWOrders.get(id); if (!o) return;
+    admSheet(aHead(AE(o.code), 'صورة الاستلام') + '<div class="pod-box" id="podBox"><span class="mut">جاري التحميل…</span></div>');
+    HWBiz.getDoc('pickpic', id).then(d => { const b = A$('podBox'); if (!b) return;
+        b.innerHTML = d && d.data ? '<img src="' + AE(d.data) + '" alt="صورة الاستلام"><small class="mut">التُقطت ' + HWOrders.fmtTime(d.at) + (o.captain ? ' · ' + AE(o.captain.name) : '') + '</small>' : '<span class="mut">لم تُرفع الصورة</span>'; });
 }
 /* صورة إثبات الوصول التي التقطها الكابتن عند الباب */
 function showPod(id) {
