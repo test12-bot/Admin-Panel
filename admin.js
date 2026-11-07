@@ -189,7 +189,7 @@ function renderOpsMap() {
     });
     Object.keys(opsMk).forEach(k => { if (!keep[k]) { opsLayer.removeLayer(opsMk[k].m); delete opsMk[k]; } });
     opsExtra.clearLayers();
-    const COLOR = { n: '#EF0000', a: '#25CED1', p: '#0E3A3B' }, pinned = {}; stores.forEach(x => { pinned[x.id] = 1; });
+    const COLOR = { n: '#EF0000', a: '#26CED0', p: '#0E3A3B' }, pinned = {}; stores.forEach(x => { pinned[x.id] = 1; });
     act.forEach(o => {
         const k = o.status === 'new' ? 'n' : o.status === 'accepted' ? 'a' : 'p';
         if (o.storeLoc && !pinned[o.storeId]) { const p = [o.storeLoc.lat, o.storeLoc.lng]; pts.push(p); L.circleMarker(p, { radius: 8, color: '#fff', weight: 2, fillColor: COLOR[k], fillOpacity: 1 }).on('click', () => openOrderSheet(o.id)).addTo(opsExtra); }
