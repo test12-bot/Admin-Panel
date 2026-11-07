@@ -79,7 +79,7 @@ function initIntroVideo() {
         'void main(){ uv = vec2(p.x*0.5+0.5, 0.5-p.y*0.5); gl_Position = vec4(p,0.0,1.0); }');
     const fs = compile(gl.FRAGMENT_SHADER,
         'precision mediump float; uniform sampler2D tex; varying vec2 uv;' +
-        'const vec3 BG = vec3(33.0,204.0,208.0)/255.0;' +            // لون خلفية الفيديو
+        'const vec3 BG = vec3(37.0,205.0,208.0)/255.0;' +            // لون خلفية الفيديو
         'void main(){' +
         '  vec3 c = texture2D(tex, uv).rgb;' +
         '  float a = clamp((distance(c, BG) - 0.035) / 0.80, 0.0, 1.0);' +
@@ -219,7 +219,7 @@ function applyUser(user) {
 
 
 /* ---------- الحساب: صورة الإدارة (شعار HIGHWAY)، القائمة أعلى الشاشة، صفحة الملف الشخصي ---------- */
-const ADMIN_AV = 'art/av-hw.jpg';
+const ADMIN_AV = 'art/av-hw.jpg?v=2';
 function fillUserUI(u) {
     const nm = u.label || 'HIGHWAY Delivery', role = u.role === 'dispatcher' ? 'منسق عمليات' : 'مسؤول النظام';
     document.getElementById('pfImg').src = ADMIN_AV;

@@ -193,7 +193,7 @@ function renderOpsMap() {
     act.forEach(o => {
         const k = o.status === 'new' ? 'n' : o.status === 'accepted' ? 'a' : 'p';
         if (o.storeLoc && !pinned[o.storeId]) { const p = [o.storeLoc.lat, o.storeLoc.lng]; pts.push(p); L.circleMarker(p, { radius: 8, color: '#fff', weight: 2, fillColor: COLOR[k], fillOpacity: 1 }).on('click', () => openOrderSheet(o.id)).addTo(opsExtra); }
-        if (o.address && o.address.lat != null) { const p = [o.address.lat, o.address.lng]; pts.push(p); L.marker(p, { icon: HWMap.ICON.home() }).on('click', () => openOrderSheet(o.id)).addTo(opsExtra); }
+        if (HWOrders.destLL(o)) { const p = HWOrders.destLL(o); pts.push(p); L.marker(p, { icon: HWMap.ICON.home() }).on('click', () => openOrderSheet(o.id)).addTo(opsExtra); }
     });
     A$('opsLbl').textContent = act.length + ' طلب نشط · ' + caps.length + ' كابتن';
     if (!opsFitted && pts.length) { opsMap.invalidateSize(); HWMap.fit(opsMap, pts, HWMap.mpPad()); opsFitted = true; }
@@ -266,7 +266,7 @@ function storeInfo(id, mode) {
     const st = stCol.get(id) || {}, ss = HWBiz.storeStatus(st), mine = allOrders.filter(o => o.storeId === id), now = HWOrders.prioritySort(mine.filter(HWOrders.isActive));
     const today = mine.filter(o => HWOrders.isToday(o.createdAt) && o.status !== 'cancelled').length, wait = now.filter(o => o.status === 'new').length, rt = HWBiz.storeRating(id, allOrders), ph = telOf(s.phone);
     const stTxt = s.active === false ? 'الحساب موقوف' : ss.open ? 'مفتوح' : ss.paused ? 'متوقف مؤقتًا' : 'مغلق';
-    return '<div class="ip ' + mode + '"><div class="ip-h sq"><img src="' + AE(HWBiz.logo(id)) + '" alt="" onerror="this.src=\'logo-icon.png\'"><div><b>' + AE(s.name) + '</b><span><em class="ip-st ' + (s.active === false ? 'off' : ss.open ? 'on' : 'idle') + '">' + stTxt + '</em>' + (s.cat ? '<i class="ip-cat">' + AE(s.cat) + '</i>' : '') + '</span></div></div>' +
+    return '<div class="ip ' + mode + '"><div class="ip-h sq"><img src="' + AE(HWBiz.logo(id)) + '" alt="" onerror="this.src=\'logo-icon.png?v=2\'"><div><b>' + AE(s.name) + '</b><span><em class="ip-st ' + (s.active === false ? 'off' : ss.open ? 'on' : 'idle') + '">' + stTxt + '</em>' + (s.cat ? '<i class="ip-cat">' + AE(s.cat) + '</i>' : '') + '</span></div></div>' +
         '<div class="ip-k"><div class="' + (wait ? 'hot' : '') + '"><b>' + wait + '</b><small>بانتظار كابتن</small></div><div><b>' + now.length + '</b><small>نشطة الآن</small></div><div><b>' + today + '</b><small>طلبات اليوم</small></div></div>' +
         (s.addr ? '<div class="ip-l"><span>العنوان</span><b>' + AE(s.addr) + '</b></div>' : '') +
         (rt.n ? '<div class="ip-l"><span>تقييم العملاء</span><b>' + rt.avg.toFixed(1) + ' من 5 · ' + rt.n + ' تقييم</b></div>' : '') +
@@ -280,7 +280,7 @@ function storeInfo(id, mode) {
 function custInfo(phone, name, img) {
     const mine = allOrders.filter(o => o.customer && o.customer.phone === phone), done = mine.filter(o => o.status === 'delivered'), canc = mine.filter(o => o.status === 'cancelled').length;
     const now = mine.filter(HWOrders.isActive), spent = done.reduce((a, o) => a + HWOrders.settle(o).collected, 0), rec = custCol.get(phone) || {}, last = mine.slice().sort((a, b) => b.createdAt - a.createdAt)[0], ph = telOf(phone);
-    return '<div class="ip full"><div class="ip-h"><img src="' + AE(img || 'art/av-cm.png') + '" alt="" onerror="this.src=\'logo-icon.png\'"><div><b>' + AE(name || 'عميل') + '</b><span><em class="ip-st ' + (rec.blocked ? 'off' : 'on') + '">' + (rec.blocked ? 'محظور' : 'عميل') + '</em></span></div></div>' +
+    return '<div class="ip full"><div class="ip-h"><img src="' + AE(img || 'art/av-cm.png') + '" alt="" onerror="this.src=\'logo-icon.png?v=2\'"><div><b>' + AE(name || 'عميل') + '</b><span><em class="ip-st ' + (rec.blocked ? 'off' : 'on') + '">' + (rec.blocked ? 'محظور' : 'عميل') + '</em></span></div></div>' +
         '<div class="ip-k"><div><b>' + done.length + '</b><small>طلبات مسلّمة</small></div><div><b dir="ltr">' + AM(spent) + '</b><small>مجموع ما دفع</small></div><div class="' + (canc ? 'hot' : '') + '"><b>' + canc + '</b><small>ملغاة</small></div></div>' +
         (phone ? '<div class="ip-l"><span>الهاتف</span><b dir="ltr">' + AE(phone) + '</b></div>' : '') +
         (last ? '<div class="ip-l"><span>آخر طلب</span><b>' + AE(last.storeName || '') + ' · ' + AE(HWOrders.fmtTime(last.createdAt)) + '</b></div>' : '') +
@@ -329,7 +329,7 @@ function liveCard(o, st) {
     }
     const fee = !HWOrders.isMarket(o) && !(HWOrders.settle(o).fee > 0) ? '<span class="lv-tag">بلا أجرة</span>' : '';
     return '<div class="lv-c ' + st.k + (o.urgent ? ' urg' : '') + '" data-lv="' + AE(o.id) + '"><div class="lv-top"><b class="lv-no" dir="ltr">' + AE(HWOrders.shortNo(o)) + '</b><span class="lv-st">' + AE(o.storeName || o.from || '—') + '</span>' + fee +
-        (() => { const e = st.k !== 'n' ? HWOrders.eta(o) : null; return e ? '<span class="lv-t ' + (e.late ? 'late' : '') + '">' + (e.late ? 'متأخر ' + e.late + ' د' : 'يصل <span dir="ltr">' + HWOrders.clock(e.at) + '</span>') + '</span>' : '<span class="lv-t ' + tone + '">' + m + ' د</span>'; })() + '</div><div class="lv-bot"><span class="lv-l">' + line + (o.to ? ' · <span class="lv-to">' + AE(o.to) + '</span>' : '') + '</span>' + act + '</div></div>';
+        (() => { const e = st.k !== 'n' ? HWOrders.eta(o) : null; return e ? '<span class="lv-t ' + (e.late ? 'late' : '') + '">' + (e.late ? 'متأخر ' + e.late + ' د' : 'يصل <span dir="ltr">' + HWOrders.clock(e.at) + '</span>') + '</span>' : '<span class="lv-t ' + tone + '">' + m + ' د</span>'; })() + '</div><div class="lv-bot"><span class="lv-l">' + line + (o.to ? ' · <span class="lv-to">' + AE(o.to) + '</span>' : '') + '</span>' + act + '</div>' + (st.k !== 'n' && o.captain ? HWOrders.progress_(o) : '') + '</div>';
 }
 function renderLive() {
     const box = A$('liveBox'); if (!box) return;

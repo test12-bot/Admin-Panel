@@ -192,7 +192,7 @@ function renderCapMap() {
     storePins().forEach(x => { pts.push(x.p); capPop(L.marker(x.p, { icon: HWMap.ICON.store(x.id, stOf[x.id]), zIndexOffset: stOf[x.id] ? 300 : 100 }), 's', x.id).addTo(capLayer); });
     const age = c => Date.now() - (c.locAt || c.lastSeen || 0);
     capsCol.list().filter(c => c.lat != null && c.active !== false && c.online && age(c) < 30 * 60000).forEach(c => { const p = [c.lat, c.lng], old = age(c) > 90000; pts.push(p); capPop(L.marker(p, { icon: HWMap.ICON.cap(), opacity: old ? .5 : 1, zIndexOffset: 400 }), 'k', c.id).addTo(capLayer); });
-    allOrders.filter(HWOrders.isActive).forEach(o => { if (o.address && o.address.lat != null) { const p = [o.address.lat, o.address.lng]; pts.push(p); L.marker(p, { icon: HWMap.ICON.home() }).on('click', () => openOrderSheet(o.id)).addTo(capLayer); } if (o.storeLoc) { pts.push([o.storeLoc.lat, o.storeLoc.lng]); } });
+    allOrders.filter(HWOrders.isActive).forEach(o => { if (HWOrders.destLL(o)) { const p = HWOrders.destLL(o); pts.push(p); L.marker(p, { icon: HWMap.ICON.home() }).on('click', () => openOrderSheet(o.id)).addTo(capLayer); } if (o.storeLoc) { pts.push([o.storeLoc.lat, o.storeLoc.lng]); } });
     if (!capFitted && pts.length) { capMap.invalidateSize(); HWMap.fit(capMap, pts, HWMap.mpPad()); capFitted = true; }
 }
 (function () { const _r = window.renderCaps; window.renderCaps = function () { _r(); renderCapMap(); }; })();
