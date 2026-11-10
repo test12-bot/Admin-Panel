@@ -1,373 +1,56 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="ar"><!-- بدون dir="rtl": اتجاه الصفحة يخرّب أماكن عناصر Flutter (الأزرار وحقول الكتابة)، والتطبيق يدير اتجاهه بنفسه -->
 <head>
-<script>try{var d=document.documentElement,t=localStorage.getItem("hw-theme")||"light";if(t==="auto")t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";d.setAttribute("data-theme",t);if(localStorage.getItem("hw-lang")==="en"){d.lang="en";d.dir="ltr"}}catch(e){}</script>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="description" content="HIGHWAY Admin Panel — إدارة الطلبات والكباتن والإسناد">
-<title>HIGHWAY Admin Panel</title>
-<meta name="theme-color" content="#26CED0">
-<link rel="manifest" href="manifest.webmanifest">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="HW Admin">
-<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=24">
-<link rel="apple-touch-icon" href="icon-512.png?v=24">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;500;600;700;800;900&family=Baloo+2:wght@500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="leaflet.css?v=1.06">
-<link rel="stylesheet" href="styles.css?v=1.06">
-<link rel="stylesheet" href="map.css?v=1.06">
-<link rel="stylesheet" href="theme.css?v=1.06">
-<link rel="stylesheet" href="dark.css?v=1.06">
-<link rel="stylesheet" href="hw-layout.css?v=1.06">
-<link rel="stylesheet" href="hw-type.css?v=1.06">
+  <base href="/admin-panel/">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="description" content="لوحة إدارة HIGHWAY Delivery">
+  <meta name="theme-color" content="#26CED0">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="HW Admin">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="manifest" href="manifest.json">
+  <title>HIGHWAY Admin</title>
+  <style>
+    /* مساحات الأمان (النوتش وشريط الرجوع) يقرأها التطبيق عبر hwSafe */
+    :root { --sat: env(safe-area-inset-top, 0px); --sar: env(safe-area-inset-right, 0px); --sab: env(safe-area-inset-bottom, 0px); --sal: env(safe-area-inset-left, 0px); }
+    html, body { margin: 0; height: 100%; background: #FBFAF7; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+    #hw-load { position: fixed; inset: 0; pointer-events: none; display: flex; align-items: center; justify-content: center; background: #26CED0; z-index: 9; transition: opacity .35s ease; }
+    #hw-load img { width: 104px; height: 104px; border-radius: 26px; box-shadow: 0 18px 40px -16px rgba(14,58,59,.55); animation: hwp 1.3s ease-in-out infinite; }
+    @keyframes hwp { 50% { transform: scale(.93); opacity: .85; } }
+  </style>
+  <script>
+    window.hwSafe = function () {
+      var s = getComputedStyle(document.documentElement);
+      return ['--sat', '--sar', '--sab', '--sal'].map(function (k) { return parseFloat(s.getPropertyValue(k)) || 0; }).join(',');
+    };
+    // المواقع القديمة كانت تخزّن نفسها في الجوال: نزيلها حتى يفتح التطبيق الجديد دائمًا
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function (rs) { rs.forEach(function (r) { r.unregister(); }); }).catch(function () {});
+      if (window.caches) caches.keys().then(function (ks) { ks.forEach(function (k) { caches.delete(k); }); }).catch(function () {});
+    }
+    // شاشة التحميل تختفي لما يظهر التطبيق (أول رسمة)، ولا تمنع اللمس أبدًا
+    (function () {
+      var done = false;
+      function hide() {
+        if (done) return; done = true;
+        var l = document.getElementById('hw-load'); if (!l) return;
+        l.style.opacity = '0'; setTimeout(function () { l.remove(); }, 400);
+      }
+      window.addEventListener('flutter-first-frame', hide);
+      new MutationObserver(function (_, o) {
+        if (document.querySelector('flutter-view, flt-glass-pane')) { o.disconnect(); setTimeout(hide, 450); }
+      }).observe(document.documentElement, { childList: true, subtree: true });
+      setTimeout(hide, 12000);
+    })();
+  </script>
 </head>
 <body>
-
-<div class="ambient"></div>
-
-<!-- الشاشة الافتتاحية + تسجيل الدخول (الإطار الزجاجي نفسه يكبر) -->
-<div id="splash">
-  <div class="splash-icons" id="splashIcons"></div>
-  <div class="splash-content">
-    <div class="splash-logo-wrap" id="splashCard">
-      <div class="logo-stage">
-        <video class="splash-video" id="splashVideo" autoplay muted playsinline preload="auto" aria-hidden="true">
-          <source src="splash-intro.mp4?v=33" type="video/mp4">
-          <source src="splash-intro.webm?v=33" type="video/webm">
-        </video>
-        <canvas class="splash-canvas" id="splashCanvas" width="1080" height="530" role="img" aria-label="HIGHWAY Delivery"></canvas>
-        <img class="splash-fallback" src="splash-logo-final.png?v=33" alt="" width="1080" height="530" aria-hidden="true">
-        <button class="login-back" id="loginBack" type="button" onclick="closeLogin()" aria-label="رجوع للشاشة الرئيسية" tabindex="-1">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-        </button>
-      </div>
-
-      <div class="login-panel" id="loginPanel" aria-hidden="true">
-        <div class="login-clip">
-          <form class="login-form" id="loginForm" novalidate autocomplete="on">
-            <h1>تسجيل الدخول</h1>
-            <p class="login-sub">أدخل بيانات حسابك للمتابعة</p>
-
-            <div class="field" id="loginUserField">
-              <label for="loginUser">اسم المستخدم</label>
-              <input type="text" id="loginUser" name="username" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" dir="ltr" placeholder="Username" tabindex="-1">
-            </div>
-            <div class="field" id="loginPassField">
-              <label for="loginPass">كلمة المرور</label>
-              <div class="pass-wrap">
-                <input type="password" id="loginPass" name="password" autocomplete="current-password" dir="ltr" placeholder="Password" tabindex="-1">
-                <button type="button" class="pass-toggle" id="passToggle" onclick="togglePass()" aria-label="إظهار كلمة المرور" tabindex="-1">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
-                </button>
-              </div>
-            </div>
-
-            <label class="remember"><input type="checkbox" id="loginRemember" tabindex="-1"><span class="box"></span><span>تذكرني على هذا الجهاز</span></label>
-            <div class="login-error" id="loginError" role="alert"></div>
-
-            <button type="submit" class="submit-btn" id="loginBtn" tabindex="-1">
-              <span class="spinner"></span>
-              <span class="btn-label">دخول</span>
-            </button>
-          </form>
-        </div>
-      </div>
-    </div>
-
-    <div class="splash-extras" id="splashExtras">
-      <div class="splash-extras-in"><div class="splash-extras-pad">
-        <div class="splash-tagline">أسرع طريق لطلباتك</div>
-        <div class="splash-status">
-          <span>جاري تجهيز لوحة الإدارة</span>
-          <span class="dot-flow"><span></span><span></span><span></span></span>
-        </div>
-        <button class="splash-enter" id="enterBtn" type="button">الدخول للوحة التحكم ←</button>
-      </div></div>
-    </div>
-  </div>
-</div>
-
-<div class="app-shell" id="appShell">
-
-  <header class="app-header">
-    <button class="header-back" id="headerBack" type="button" aria-label="رجوع" onclick="goBack()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-    </button>
-    <button class="brand-mini" id="brandReload" type="button" aria-label="إعادة تحميل الموقع" onclick="reloadSite()">
-      <img class="brand-mini-logo" src="logo-icon.png?v=2" alt="" width="647" height="560">
-      <div class="brand-mini-text">
-        <span class="brand-mini-title">HIGHWAY <em>Admin</em></span>
-        <span class="brand-mini-sub">Admin Panel</span>
-      </div>
-    </button>
-  </header>
-
-  <main class="main">
-
-    <section class="screen" id="screen-stats">
-      <div class="container">
-        <div class="page-heading"><h1>الإحصائيات</h1><p>الشركة لوين ماشية، بنظرة وحدة</p></div>
-        <div id="statsBody"></div>
-      </div>
-    </section>
-
-    <section class="screen mp active" id="screen-dashboard">
-      <div class="mp-map"><div class="lmap" id="opsMapEl"></div>
-        <button type="button" class="mp-fit" id="opsFit" onclick="opsFitAll()" aria-label="عرض الكل على الخريطة"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/><circle cx="12" cy="12" r="2.5"/></svg></button>
-        <div class="mp-chips"><span class="mp-chip" id="opsLbl">خريطة العمليات</span><span class="mp-chip mp-key"><i class="n"></i>بانتظار<i class="a"></i>للمتجر<i class="p"></i>للعميل</span></div></div>
-      <div class="mp-sheet"><span class="mp-grab"></span><div class="container">
-        <div class="ops-head">
-          <div><h1>العمليات الآن</h1><p id="opsSum">الطلبات الحية وما يحتاج تدخلك</p></div>
-          <button type="button" class="ops-new" onclick="goTo('screen-restaurants')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>طلب يدوي</button>
-        </div>
-        <label class="ops-q"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input type="search" id="opsQ" placeholder="ابحث برقم الطلب أو المطعم أو الكابتن" autocomplete="off" oninput="renderLive()"></label>
-        <div id="liveBox"></div>
-        <div id="kpiBox"></div>
-      </div></div>
-    </section>
-
-    <section class="screen" id="screen-restaurants">
-      <div class="container">
-        <div class="page-heading">
-          <h1>تحضير طلب</h1>
-          <p>اختر نقطة الاستلام</p>
-        </div>
-        <div class="rest-grid" id="restGrid"></div>
-      </div>
-    </section>
-
-    <section class="screen" id="screen-order">
-      <div class="container">
-        <div class="page-heading">
-          <h1>طلب يدوي</h1>
-          <p>الوجهة وقيمة الطلب فقط، والباقي على النظام</p>
-        </div>
-
-        <form class="form-card glass" id="orderForm" novalidate>
-          <div class="pickup-pill">
-            <span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5 5.2 4h13.6l1.2 5.5"/><path d="M4 9.5a2.2 2.2 0 0 0 4.3.7 2.2 2.2 0 0 0 4.3 0 2.2 2.2 0 0 0 4.3 0 2.2 2.2 0 0 0 4.3-.7"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M10 20v-5h4v5"/></svg></span>
-            <span id="pickupPillText">نقطة الاستلام</span>
-          </div>
-
-          <div class="field" id="customNameField" style="display:none;">
-            <label for="customName">اسم نقطة الاستلام</label>
-            <input type="text" id="customName" placeholder="مثال: مطعم الديار">
-            <div class="err-msg">الرجاء كتابة اسم نقطة الاستلام</div>
-          </div>
-
-          <div class="field" id="orderDestField">
-            <label>الوجهة</label>
-            <button type="button" class="dest-btn" id="orderDestBtn" onclick="pickOrderDest()">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
-              <span id="orderDestTxt">اختر المنطقة من قائمة الأسعار</span><em id="orderDestFee"></em>
-            </button>
-            <div class="err-msg">اختر الوجهة، أو "وجهة غير محددة"</div>
-          </div>
-
-          <div class="field" id="orderValueField">
-            <label for="orderValue">قيمة الطلب</label>
-            <div class="value-wrap">
-              <input type="text" id="orderValue" placeholder="مثال: 12.50 أو مدفوع" autocomplete="off">
-              <span class="cur">د.أ</span>
-            </div>
-            <div class="err-msg">الرجاء إدخال قيمة الطلب</div>
-          </div>
-
-          <button type="button" class="more-link note-tg" id="noteTg" onclick="this.hidden=true;document.getElementById('orderNoteField').hidden=false;document.getElementById('orderNotes').focus()">+ ملاحظة للكابتن</button>
-          <div class="field" id="orderNoteField" hidden>
-            <label for="orderNotes">ملاحظة للكابتن</label>
-            <textarea id="orderNotes" rows="2" placeholder="مثال: الطابق الثاني، بجانب الصيدلية"></textarea>
-          </div>
-
-          <button type="submit" class="submit-btn" id="orderSubmitBtn">
-            <span class="spinner"></span>
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-            <span class="btn-label">إرسال للكباتن</span>
-          </button>
-          <div class="last-sent" id="lastSent" hidden></div>
-        </form>
-      </div>
-    </section>
-
-    <section class="screen" id="screen-board">
-      <div class="container">
-        <div class="page-heading">
-          <h1>لوحة الطلبات</h1>
-          <p>كل الطلبات لحظة بلحظة</p>
-        </div>
-        <div class="auto-slot"></div>
-        <div class="stat-grid" id="bdStats"></div>
-        <div class="seg" id="bdSeg" role="tablist">
-          <button type="button" data-f="live" class="on">النشطة</button>
-          <button type="button" data-f="new">جديدة</button>
-          <button type="button" data-f="done">مكتملة</button>
-          <button type="button" data-f="cancel">ملغية</button>
-          <button type="button" data-f="all">الكل</button>
-        </div>
-        <div id="bdList"></div>
-      </div>
-    </section>
-
-    <!-- الكباتن -->
-    <section class="screen mp" id="screen-captains">
-      <div class="mp-map" id="capMapBox"><div class="lmap" id="capMapEl"></div></div>
-      <div class="mp-sheet"><span class="mp-grab"></span><div class="container">
-        <div class="page-heading"><h1>الكباتن</h1><p>الحسابات والتسويات اليومية</p></div>
-        <div id="capsBody"></div>
-      </div></div>
-    </section>
-
-    <!-- الإدارة -->
-    <section class="screen" id="screen-manage">
-      <div class="container">
-        <div class="page-heading"><h1>الإدارة</h1><p>المتاجر والعروض والأكواد والفريق من مكان واحد</p></div>
-        <div id="mgBody"></div>
-      </div>
-    </section>
-    <section class="screen" id="screen-menuadm">
-      <div class="container">
-        <div class="page-heading"><h1 id="menuAdmTitle">المنيو</h1><p>الأقسام والأصناف والأسعار والخيارات</p></div>
-        <div id="menuAdmBody"></div>
-      </div>
-    </section>
-    <section class="screen" id="screen-issues">
-      <div class="container">
-        <div class="page-heading"><h1>البلاغات</h1><p>مشاكل الطلبات الواردة من الكباتن</p></div>
-        <div id="issBody"></div>
-      </div>
-    </section>
-    <section class="screen" id="screen-log">
-      <div class="container">
-        <div class="page-heading"><h1>سجل النشاط</h1><p>كل إجراء في لوحة الإدارة: من فعله ومتى</p></div>
-        <div id="logBody"></div>
-      </div>
-    </section>
-
-    <!-- الملف الشخصي -->
-    <section class="screen" id="screen-support">
-      <div class="container">
-        <div class="page-heading"><h1>الدعم</h1><p>رسائل العملاء والمطاعم والكباتن</p></div>
-        <div id="supBox"></div>
-      </div>
-    </section>
-
-    <section class="screen" id="screen-profile">
-      <div class="container">
-        <article class="pf-card">
-          <div class="pf-cover"></div>
-          <div class="pf-body">
-            <div class="pf-avatar-wrap">
-              <img class="pf-av" id="pfImg" alt="" width="104" height="104">
-            </div>
-            <h1 class="pf-name" id="pfName"></h1>
-            <p class="pf-handle" id="pfHandle" dir="ltr"></p>
-            <span class="pf-chip" id="pfChip"></span>
-          </div>
-        </article>
-
-        <div class="pf-list">
-          <div class="pf-row">
-            <span class="pf-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span>
-            <span class="pf-k">اسم المستخدم</span>
-            <span class="pf-v" id="pfUser" dir="ltr"></span>
-          </div>
-          <div class="pf-row">
-            <span class="pf-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v5c0 5 3.4 8.4 8 10 4.6-1.6 8-5 8-10V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg></span>
-            <span class="pf-k">نوع الحساب</span>
-            <span class="pf-v" id="pfType"></span>
-          </div>
-        </div>
-
-        <button class="pf-logout" type="button" onclick="logout()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
-          تسجيل الخروج
-        </button>
-      </div>
-    </section>
-
-  </main>
-
-  <nav class="tabbar" aria-label="التنقل الرئيسي">
-    <button class="tab on" type="button" data-tab="home" onclick="tabGo('screen-dashboard')"><span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 12 3l9 8"/><path d="M5 10v10h5v-6h4v6h5V10"/></svg></span><span>الرئيسية</span></button>
-    <button class="tab" type="button" data-tab="board" onclick="tabGo('screen-board')"><span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l2 4v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7l2-4Z"/><path d="M4 7h16"/><path d="M9 11h6"/></svg><em class="tb" id="tabBadge"></em></span><span>الطلبات</span></button>
-    <button class="tab" type="button" data-tab="caps" onclick="tabGo('screen-captains')"><span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.5a6.5 6.5 0 0 1 3.5 5.5"/></svg></span><span>الكباتن</span></button>
-    <button class="tab" type="button" data-tab="manage" onclick="tabGo('screen-manage')"><span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg><em class="tb" id="mgBadge"></em></span><span>الإدارة</span></button>
-    <button class="tab" type="button" data-tab="support" onclick="tabGo('screen-support')"><span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.6 8.6 0 0 1-3.8-.9L3 20l1.1-4.6A8.4 8.4 0 0 1 12 3.1a8.4 8.4 0 0 1 9 8.4Z"/></svg><em class="tb" id="supBadge"></em></span><span>الدعم</span></button>
-  </nav>
-</div>
-
-<!-- ورقة تفاصيل الطلب -->
-<div id="orderSheet" class="modal" onclick="if(event.target===this) closeOrderSheet()">
-  <div class="modal-card glass" id="orderSheetBody"></div>
-</div>
-
-<div id="capSheet" class="modal" onclick="if(event.target===this) closeCapSheet()"><div class="modal-card glass" id="capSheetBody"></div></div>
-<div id="admSheet" class="modal" onclick="if(event.target===this) closeAdm()"><div class="modal-card glass" id="admSheetBody"></div></div>
-
-<!-- ورقة تعيين كابتن -->
-<div id="assignSheet" class="modal" onclick="if(event.target===this) closeAssign()">
-  <form class="modal-card glass" id="assignForm" novalidate>
-    <h3 class="modal-title">تعيين كابتن</h3>
-    <div class="modal-summary" id="asSummary" style="display:flex;"></div>
-    <div class="as-caps-t">الكباتن المتاحون (اضغط للإسناد المباشر)</div>
-    <div class="as-caps" id="asCaps"></div>
-    <div class="as-or">أو أدخل كابتنًا يدويًا</div>
-    <div class="field" id="asNameField">
-      <label for="asName">اسم الكابتن</label>
-      <input type="text" id="asName" list="capList" autocomplete="off" placeholder="مثال: محمد أحمد">
-      <datalist id="capList"></datalist>
-      <div class="err-msg">الرجاء إدخال اسم الكابتن</div>
-    </div>
-    <div class="field" id="asPhoneField">
-      <label for="asPhone">رقم الكابتن <span class="opt">(اختياري)</span></label>
-      <input type="tel" id="asPhone" inputmode="tel" autocomplete="off" dir="ltr" placeholder="مثال: 0791234567">
-      <div class="err-msg">رقم الهاتف غير صحيح</div>
-    </div>
-    <div class="field" id="asReasonField" style="display:none">
-      <label for="asReason">سبب نقل الطلب لكابتن آخر</label>
-      <select id="asReason"><option value="">اختر السبب</option><option>الكابتن تأخر</option><option>الكابتن لا يرد</option><option>عطل في المركبة</option><option>طلب الكابتن ذلك</option><option>إعادة توزيع للأقرب</option><option>أخرى</option></select>
-      <div class="err-msg">اختر سبب النقل</div>
-    </div>
-    <div class="field" id="asEtaField">
-      <label for="asEta">وقت الوصول المتوقع <span class="opt">(اختياري)</span></label>
-      <input type="time" id="asEta">
-      <div class="err-msg">الرجاء تحديد وقت الوصول المتوقع</div>
-    </div>
-    <div class="btn-row">
-      <button type="button" class="ghost-btn" onclick="closeAssign()">إلغاء</button>
-      <button type="submit" class="submit-btn"><span class="btn-label">حفظ التعيين</span></button>
-    </div>
-  </form>
-</div>
-
-<script src="leaflet.js?v=1.06"></script>
-<script src="hw-i18n.js?v=1.06"></script>
-<script src="hw-config.js?v=1.06"></script>
-<script src="hw-map.js?v=1.06"></script>
-<script src="hw-food.js?v=1.06"></script>
-<script src="hw-orders.js?v=1.06"></script>
-<script src="hw-notify.js?v=1.06"></script>
-<script src="hw-push.js?v=1.06"></script>
-<script src="hw-biz.js?v=1.06"></script>
-<script src="hw-head.js?v=1.06"></script>
-<script src="hw-icons.js?v=1.06"></script>
-<script src="hw-support.js?v=1.06"></script>
-<script src="hw-crop.js?v=1.06"></script>
-<script src="hw-menued.js?v=1.06"></script>
-<script src="hw-prices.js?v=1.06"></script>
-<script src="hw-pricelist.js?v=1.06"></script>
-<script src="hw-dest.js?v=1.06"></script>
-<script src="script.js?v=1.06"></script>
-<script src="disp-v2.js?v=1.06"></script>
-<script src="admin.js?v=1.06"></script>
-<script src="admin-stats.js?v=1.06"></script>
-<script src="admin-stores.js?v=1.06"></script>
-<script src="hw-ui.js?v=1.06"></script>
-<script src="hw-stats.js?v=1.06"></script>
-<script src="hw-onboard.js?v=1.06" data-role="admin"></script>
+  <div id="hw-load"><img src="icons/icon-192.png" alt=""></div>
+  <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
